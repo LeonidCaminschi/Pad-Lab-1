@@ -299,7 +299,7 @@ Status code 400:
 }
 ```
 
-**localhost:9999**
+**/Notification**
 ```
 Method: Websocket
 ```
