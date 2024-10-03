@@ -1,30 +1,42 @@
 package main
 
 import (
-	"bytes"
-	"io"
+    "bytes"
+    "io"
     "net/http"
     "github.com/gin-gonic/gin"
 )
 
+const maxConcurrentTasks = 10
+
+var semaphore = make(chan struct{}, maxConcurrentTasks)
+
 func main() {
     router := gin.Default()
-    router.POST("/register", postRegister)
-    router.POST("/login", postLogin)
-    router.POST("/registercard", postRegisterCard)
-	router.POST("/subscribe", postSubscribe)
-	router.POST("/cancel-subscription", postCancelSubscription)
-	router.GET("/validate-user/:token", getValidateUser)
-	router.GET("/validate-subscription/:token/:owner", getValidateSubscription)
-	router.GET("/statusA", getStatusA)
+    router.POST("/register", limitConcurrency(postRegister))
+    router.POST("/login", limitConcurrency(postLogin))
+    router.POST("/registercard", limitConcurrency(postRegisterCard))
+    router.POST("/subscribe", limitConcurrency(postSubscribe))
+    router.POST("/cancel-subscription", limitConcurrency(postCancelSubscription))
+    router.GET("/validate-user/:token", limitConcurrency(getValidateUser))
+    router.GET("/validate-subscription/:token/:owner", limitConcurrency(getValidateSubscription))
+    router.GET("/statusA", limitConcurrency(getStatusA))
 
-	router.POST("/upload", postUpload)
-	router.POST("/user/:owner", postUser)
-	router.POST("/user/:owner/:id", postUserImage)
-	router.POST("/delete/:id", postDelete)
-	router.GET("statusB", getStatusB)
+    router.POST("/upload", limitConcurrency(postUpload))
+    router.POST("/user/:owner", limitConcurrency(postUser))
+    router.POST("/user/:owner/:id", limitConcurrency(postUserImage))
+    router.POST("/delete/:id", limitConcurrency(postDelete))
+    router.GET("statusB", limitConcurrency(getStatusB))
 
     router.Run("localhost:5003")
+}
+
+func limitConcurrency(handler gin.HandlerFunc) gin.HandlerFunc {
+    return func(c *gin.Context) {
+        semaphore <- struct{}{}
+        defer func() { <-semaphore }()
+        handler(c)
+    }
 }
 
 func forwardRequest(c *gin.Context, url string, method string) {
@@ -59,13 +71,13 @@ func forwardRequest(c *gin.Context, url string, method string) {
 }
 
 func postRegister(c *gin.Context) {
-	url := "http://127.0.0.1:5001/register"
-	forwardRequest(c, url, "POST")
+    url := "http://127.0.0.1:5001/register"
+    forwardRequest(c, url, "POST")
 }
 
 func postLogin(c *gin.Context) {
-	url := "http://127.0.0.1:5001/login"
-	forwardRequest(c, url, "POST")
+    url := "http://127.0.0.1:5001/login"
+    forwardRequest(c, url, "POST")
 }
 
 func postRegisterCard(c *gin.Context) {
