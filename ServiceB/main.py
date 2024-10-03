@@ -127,6 +127,16 @@ def delete_image(image):
     close_db_connection(cursor, connection)
     return jsonify({"Response": "User is not the owner of the image"}), 400
 
+@app.route('/status', methods=['GET'])
+def status():
+    try:
+        connection = get_db_connection()
+        close_db_connection(connection=connection, cursor=connection.cursor())
+    except Exception as e:
+        return jsonify({"Response": "Service A is down"}), 500
+    
+    return jsonify({"Response": "Service A is up and running"}), 200
+
 # @socketio.on('connect')
 # def handle_connect():
 #     emit('message', {'data': 'Connected to the server'})

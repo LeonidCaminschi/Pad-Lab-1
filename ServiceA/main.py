@@ -233,5 +233,15 @@ def validate_subscription(token, owner):
     close_db_connection(connection=connection, cursor=cursor)
     return jsonify({"Response": "User is subscribed to this user"}), 200
 
+@app.route('/status', methods=['GET'])
+def status():
+    try:
+        connection = get_db_connection()
+        close_db_connection(connection=connection, cursor=connection.cursor())
+    except Exception as e:
+        return jsonify({"Response": "Service A is down"}), 500
+    
+    return jsonify({"Response": "Service A is up and running"}), 200
+
 if __name__ == '__main__':
     app.run(debug=True, port=5001)
