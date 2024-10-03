@@ -2,6 +2,7 @@ from flask import Flask, request, jsonify
 import mysql.connector
 import re
 import secrets
+import time
 
 app = Flask(__name__)
 
@@ -26,6 +27,25 @@ def close_db_connection(cursor, connection):
 # Endpoints
 def is_valid_username_password(username, password):
     return re.match("^[a-zA-Z0-9]+$", username) and re.match("^[a-zA-Z0-9]+$", password)
+
+@app.before_request
+def start_timer():
+    request.start_time = time.time()
+
+@app.after_request
+def check_timeout(response):
+    # Set timeout limit (in seconds)
+    timeout_limit = 5  # For example, 5 seconds
+    duration = time.time() - request.start_time
+
+    # If the request took longer than the timeout limit, return a 408 response
+    if duration > timeout_limit:
+        # Create a response object with the 408 status
+        response = jsonify({"Response": "Request Timeout"})
+        response.status_code = 408
+        return response
+
+    return response
 
 @app.route('/register', methods=['POST'])
 def register():

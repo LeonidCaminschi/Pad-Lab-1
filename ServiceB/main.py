@@ -1,8 +1,8 @@
 from flask import Flask, request, jsonify
 from flask_socketio import SocketIO, emit
 import mysql.connector
-import os
 import requests
+import time
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'your_secret_key'
@@ -36,6 +36,25 @@ def validate_subscription(token, owner):
     if request.status_code == 200:
         return True
     return None
+
+@app.before_request
+def start_timer():
+    request.start_time = time.time()
+
+@app.after_request
+def check_timeout(response):
+    # Set timeout limit (in seconds)
+    timeout_limit = 5  # For example, 5 seconds
+    duration = time.time() - request.start_time
+
+    # If the request took longer than the timeout limit, return a 408 response
+    if duration > timeout_limit:
+        # Create a response object with the 408 status
+        response = jsonify({"Response": "Request Timeout"})
+        response.status_code = 408
+        return response
+
+    return response
 
 @app.route('/upload', methods=['POST'])
 def upload():
