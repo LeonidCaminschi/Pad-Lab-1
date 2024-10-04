@@ -3,6 +3,7 @@ from flask_socketio import SocketIO, emit
 import mysql.connector
 import requests
 import time
+import redis
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'your_secret_key'
@@ -16,6 +17,8 @@ db_config = {
     'database': 'ServiceB',
     'port': 3308
 }
+
+redis_client = redis.StrictRedis(host='localhost', port=6379, db=0)
 
 def get_db_connection():
     connection = mysql.connector.connect(**db_config)
@@ -86,6 +89,11 @@ def get_images(owner):
     data = request.json
     token = data.get('user')
 
+    # Check Redis cache first
+    cached_images = redis_client.get(f'images_{owner}')
+    if cached_images:
+        return jsonify({"Response": eval(cached_images)}), 200
+
     connection = get_db_connection()
     cursor = connection.cursor()
 
@@ -94,6 +102,10 @@ def get_images(owner):
         cursor.execute("SELECT * FROM images WHERE username = %s", (owner,))
         images = cursor.fetchall()
         close_db_connection(cursor, connection)
+
+        # Store the result in Redis
+        redis_client.set(f'images_{owner}', str(images))
+
         return jsonify({"Response": images}), 200
 
     close_db_connection(cursor, connection)
@@ -104,19 +116,27 @@ def get_image(owner, image):
     data = request.json
     token = data.get('user')
 
+    # Check Redis cache first
+    cached_image = redis_client.get(f'image_{image}')
+    if cached_image:
+        return jsonify({"Response": eval(cached_image)}), 200
+
     connection = get_db_connection()
     cursor = connection.cursor()
 
     isvalid = validate_subscription(token, owner)
     if isvalid or owner == validate_user(token):
-        # check if image exists first
         cursor.execute("SELECT * FROM images WHERE image = %s", (image,))
         image = cursor.fetchone()
         if not image:
             close_db_connection(cursor, connection)
             return jsonify({"Response": "Image not found"}), 400
-        
+
         close_db_connection(cursor, connection)
+
+        # Store the result in Redis
+        redis_client.set(f'image_{image}', str(image))
+
         return jsonify({"Response": image}), 200
 
     close_db_connection(cursor, connection)
@@ -140,11 +160,16 @@ def delete_image(image):
     if username and username[0] == owner:
         cursor.execute("DELETE FROM images WHERE image = %s", (image,))
         connection.commit()
+
+        # Invalidate the cache
+        redis_client.delete(f'image_{image}')
+        redis_client.delete(f'images_{username[0]}')
+
         close_db_connection(cursor, connection)
         return jsonify({"Response": "Image successfully deleted"}), 200
 
     close_db_connection(cursor, connection)
-    return jsonify({"Response": "User is not the owner of the image"}), 400
+    return jsonify({"Response": "User does not have permission to delete image"}), 400
 
 @app.route('/status', methods=['GET'])
 def status():
