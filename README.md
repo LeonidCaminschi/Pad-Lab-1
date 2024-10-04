@@ -106,7 +106,7 @@ Status code 401:
 }
 ```
 
-**/subscribe/{owner_name}**
+**/registercard**
 ```
 Method: Post
 ```
@@ -114,9 +114,36 @@ Method: Post
 Sent data:
 {
     user:{token},
-    owner:{owner},
-    card-info:{card-info},
+    cardinfo:{cardinfo},
     cvv:{cvv}
+    money:{money}
+}
+```
+```
+Recieved data:
+Status code 200:
+{
+    Response:"Succesful card registration"
+}
+Status code 400:
+{
+    Response:"a card was already binded to that user"
+}
+Status code 400:
+{
+    Response:"Wrong card/cvv data"
+}
+```
+
+**/subscribe**
+```
+Method: Post
+```
+```
+Sent data:
+{
+    user:{token},
+    owner:{owner}
 }
 ```
 ```
@@ -132,6 +159,10 @@ Status code 400:
 Status code 400:
 {
     Response:"Insuficient funds"
+}
+Status code 400:
+{
+    Response:"Invalid token"
 }
 ```
 
@@ -171,14 +202,56 @@ Sent data: no sent data
 ```
 Status code 200:
 {
-    Response:"User succesfuly validated",
-    till-time:"11:09:2025"
+    Response:"User succesfuly validated"
 }
 Status code 400:
 {
     Response:"User validation rejected"
 }
+Status code 400:
+{
+    Response:"Invalid token"
+}
 ```
+
+**/validate-subscription/{token}/{owner}**
+```
+Method: GET
+```
+```
+Sent data: no sent data
+```
+```
+Status code 200:
+{
+    Response:"User subscription validated"
+}
+Status code 400:
+{
+    Response:"User subscription rejected"
+}
+Status code 400:
+{
+    Response:"Invalid token"
+}
+```
+
+**/status**
+```
+Method: GET
+```
+```
+Sent data: no sent data
+```
+```
+Status code 200:
+{
+    Response:"Service up and running"
+}
+Status code 400:
+{
+    Response:"Error on Service"
+}
 
 **Image Sharing**
 
@@ -216,7 +289,7 @@ Status code 400:
 }
 ```
 
-**/{owner}**
+**/user/{owner}**
 ```
 Method: Post
 ```
@@ -241,7 +314,7 @@ Status code 400:
 }
 ```
 
-**/{owner}/{image-id}**
+**/user/{owner}/{image-id}**
 ```
 Method: Post
 ```
@@ -313,6 +386,23 @@ Error: "invalid username/password"
 Error: "invalid token"
 Error: "connection closed till date was reached"
 ```
+
+**/status**
+```
+Method: GET
+```
+```
+Sent data: no sent data
+```
+```
+Status code 200:
+{
+    Response:"Service up and running"
+}
+Status code 400:
+{
+    Response:"Error on Service"
+}
 
 # 5) Deployment and Scaling
 
