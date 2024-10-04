@@ -2,12 +2,16 @@ package main
 
 import (
     "bytes"
+    "context"
     "io"
     "net/http"
+    "time"
+
     "github.com/gin-gonic/gin"
 )
 
 const maxConcurrentTasks = 10
+const requestTimeout = 10 * time.Second
 
 var semaphore = make(chan struct{}, maxConcurrentTasks)
 
@@ -53,10 +57,22 @@ func forwardRequest(c *gin.Context, url string, method string) {
     }
     req.Header.Set("Content-Type", "application/json")
 
-    client := &http.Client{}
+    client := &http.Client{
+        Timeout: requestTimeout,
+    }
+
+    ctx, cancel := context.WithTimeout(context.Background(), requestTimeout)
+    defer cancel()
+
+    req = req.WithContext(ctx)
+
     resp, err := client.Do(req)
     if err != nil {
-        c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to send request"})
+        if ctx.Err() == context.DeadlineExceeded {
+            c.JSON(http.StatusRequestTimeout, gin.H{"error": "Request timed out"})
+        } else {
+            c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to send request"})
+        }
         return
     }
     defer resp.Body.Close()
@@ -81,57 +97,58 @@ func postLogin(c *gin.Context) {
 }
 
 func postRegisterCard(c *gin.Context) {
-	url := "http://127.0.0.1:5001/registercard"
-	forwardRequest(c, url, "POST")
+    url := "http://127.0.0.1:5001/registercard"
+    forwardRequest(c, url, "POST")
 }
 
 func postSubscribe(c *gin.Context) {
-	url := "http://127.0.0.1:5001/subscribe"
-	forwardRequest(c, url, "POST")
+    url := "http://127.0.0.1:5001/subscribe"
+    forwardRequest(c, url, "POST")
 }
 
 func postCancelSubscription(c *gin.Context) {
-	url := "http://127.0.0.1:5001/cancel-subscription"
-	forwardRequest(c, url, "POST")
+    url := "http://127.0.0.1:5001/cancel-subscription"
+    forwardRequest(c, url, "POST")
 }
 
 func getValidateUser(c *gin.Context) {
-	url := "http://127.0.0.1:5001/validate-user/"+c.Param("token")
-	forwardRequest(c, url, "GET")
+    url := "http://127.0.0.1:5001/validate-user/" + c.Param("token")
+    forwardRequest(c, url, "GET")
 }
 
 func getValidateSubscription(c *gin.Context) {
-	url := "http://127.0.0.1:5001/validate-subscription/"+c.Param("token")+"/"+c.Param("owner")
-	forwardRequest(c, url, "GET")
+    url := "http://127.0.0.1:5001/validate-subscription/" + c.Param("token") + "/" + c.Param("owner")
+    forwardRequest(c, url, "GET")
 }
 
 func getStatusA(c *gin.Context) {
-	url := "http://127.0.0.1:5001/status"
-	forwardRequest(c, url, "GET")
+    url := "http://127.0.0.1:5001/status"
+    forwardRequest(c, url, "GET")
 }
 
+/////////////////////////////////////////////////////
 
 func postUpload(c *gin.Context) {
-	url := "http://127.0.0.1:5002/upload"
-	forwardRequest(c, url, "POST")
+    url := "http://127.0.0.1:5002/upload"
+    forwardRequest(c, url, "POST")
 }
 
 func postUser(c *gin.Context) {
-	url := "http://127.0.0.1:5002/user/"+c.Param("owner")
-	forwardRequest(c, url, "POST")
+    url := "http://127.0.0.1:5002/user/" + c.Param("owner")
+    forwardRequest(c, url, "POST")
 }
 
 func postUserImage(c *gin.Context) {
-	url := "http://127.0.0.1:5002/user/"+c.Param("owner")+"/"+c.Param("id")
-	forwardRequest(c, url, "POST")
+    url := "http://127.0.0.1:5002/user/" + c.Param("owner") + "/" + c.Param("id")
+    forwardRequest(c, url, "POST")
 }
 
 func postDelete(c *gin.Context) {
-	url := "http://127.0.0.1:5002/delete/"+c.Param("id")
-	forwardRequest(c, url, "POST")
+    url := "http://127.0.0.1:5002/delete/" + c.Param("id")
+    forwardRequest(c, url, "POST")
 }
 
 func getStatusB(c *gin.Context) {
-	url := "http://127.0.0.1:5002/status"
-	forwardRequest(c, url, "GET")
+    url := "http://127.0.0.1:5002/status"
+    forwardRequest(c, url, "GET")
 }
