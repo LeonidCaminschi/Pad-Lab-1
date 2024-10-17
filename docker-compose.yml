@@ -30,6 +30,15 @@ services:
     volumes:
       - DB-B:/var/lib/mysql
 
+  redis:
+    image: redis:latest
+    restart: always
+    ports:
+      - '6666:6379'
+    volumes:
+      - redis-data:/data
+
 volumes:
   DB-A:
   DB-B:
+  redis-data:
