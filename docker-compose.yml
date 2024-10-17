@@ -56,7 +56,6 @@ services:
       replicas: 2
     ports:
       - '5000'
-    hostname: serviceA
 
   serviceB:
     image: serviceb:latest
@@ -73,7 +72,6 @@ services:
       replicas: 2
     ports:
       - '5000'
-    hostname: serviceB
 
   gateway:
     build: ./Gateway

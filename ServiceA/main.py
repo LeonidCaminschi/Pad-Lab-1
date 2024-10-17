@@ -4,6 +4,8 @@ import re
 import secrets
 import time
 import socket
+import requests
+import sys
 
 app = Flask(__name__)
 
@@ -264,5 +266,33 @@ def status():
     
     return jsonify({"Response": "Service A is up and running", "Host": socket.gethostname() }), 200
 
+def register_service():
+    service_info = {
+        "name": "serviceA",
+        "host": socket.gethostname(),
+        "port": 5000
+    }
+
+    timeout_limit = 5  # Timeout limit in seconds
+    max_retries = 3  # Number of retries
+    retry_delay = 2  # Delay between retries in seconds
+
+    for attempt in range(max_retries):
+        try:
+            response = requests.post('http://pad-lab-1-service-discovery-1:5005/register', json=service_info, timeout=timeout_limit)
+            if response.status_code == 200:
+                print("Service registered successfully")
+                break
+            else:
+                print(f"Failed to register service, status code: {response.status_code}")
+        except requests.exceptions.RequestException as e:
+            print(f"Attempt {attempt + 1} failed: {e}")
+            if attempt < max_retries - 1:
+                time.sleep(retry_delay)
+            else:
+                print("All attempts to register the service failed. Exiting.")
+                sys.exit(1)
+
 if __name__ == '__main__':
+    register_service()
     app.run(debug=True, host='0.0.0.0', port=5000)
