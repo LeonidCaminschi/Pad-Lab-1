@@ -10,9 +10,9 @@ app = Flask(__name__)
 db_config = {
     'user': 'root',
     'password': '',
-    'host': 'localhost',
+    'host': 'db1',
     'database': 'ServiceA',
-    'port': 3307
+    'port': 3306
 }
 
 # Establish MySQL connection
@@ -259,9 +259,9 @@ def status():
         connection = get_db_connection()
         close_db_connection(connection=connection, cursor=connection.cursor())
     except Exception as e:
-        return jsonify({"Response": "Service A is down"}), 500
+        return jsonify({"Response": "Service A is down", "Error": str(e)}), 500
     
     return jsonify({"Response": "Service A is up and running"}), 200
 
 if __name__ == '__main__':
-    app.run(debug=True, port=5001)
+    app.run(debug=True, host='0.0.0.0', port=5000)

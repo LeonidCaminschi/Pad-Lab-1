@@ -38,6 +38,38 @@ services:
     volumes:
       - redis-data:/data
 
+  serviceA:
+    image: servicea:latest
+    restart: always
+    environment:
+      - DB_HOST=db1
+      - DB_PORT=3307
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+    depends_on:
+      - db1
+      - redis
+    deploy:
+      replicas: 1
+    ports:
+      - '5001:5000'
+
+  serviceB:
+    image: serviceb:latest
+    restart: always
+    environment:
+      - DB_HOST=db2
+      - DB_PORT=3308
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+    depends_on:
+      - db2
+      - redis
+    deploy:
+      replicas: 1
+    ports:
+      - '5002:5000'
+
 volumes:
   DB-A:
   DB-B:

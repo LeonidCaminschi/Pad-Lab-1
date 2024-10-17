@@ -1,0 +1,6 @@
+flask
+mysql-connector-python
+flask-caching
+redis
+requests
+flask_socketio
