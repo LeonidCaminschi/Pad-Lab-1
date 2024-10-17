@@ -1,4 +1,5 @@
-version: '3.3'
+version: '3.8'
+
 services:
   db1:
     image: mysql:5.7
@@ -14,6 +15,7 @@ services:
       - '3306'
     volumes:
       - DB-A:/var/lib/mysql
+    hostname: db1
 
   db2:
     image: mysql:5.7
@@ -29,6 +31,7 @@ services:
       - '3306'
     volumes:
       - DB-B:/var/lib/mysql
+    hostname: db2
 
   redis:
     image: redis:latest
@@ -37,6 +40,7 @@ services:
       - '6666:6379'
     volumes:
       - redis-data:/data
+    hostname: redis
 
   serviceA:
     image: servicea:latest
@@ -52,6 +56,7 @@ services:
       replicas: 2
     ports:
       - '5000'
+    hostname: serviceA
 
   serviceB:
     image: serviceb:latest
@@ -68,13 +73,22 @@ services:
       replicas: 2
     ports:
       - '5000'
+    hostname: serviceB
 
-  network-discovery-service:
+  gateway:
+    build: ./Gateway
+    restart: always
+    ports:
+      - '5003:5003'
+    hostname: gateway
+
+  service-discovery:
     build: ./service_discovery
     restart: always
     ports:
       - '5005:5005'
       - '50051:50051'
+    hostname: service-discovery
 
 volumes:
   DB-A:
