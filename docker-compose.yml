@@ -52,7 +52,7 @@ services:
     deploy:
       replicas: 1
     ports:
-      - '5001:5000'
+      - '5000'
 
   serviceB:
     image: serviceb:latest
@@ -68,7 +68,7 @@ services:
     deploy:
       replicas: 1
     ports:
-      - '5002:5000'
+      - '5000'
 
 volumes:
   DB-A:
