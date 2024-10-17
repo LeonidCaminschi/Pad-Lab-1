@@ -69,6 +69,13 @@ services:
     ports:
       - '5000'
 
+  network-discovery-service:
+    build: ./service_discovery
+    restart: always
+    ports:
+      - '5005:5005'
+      - '50051:50051'
+
 volumes:
   DB-A:
   DB-B:

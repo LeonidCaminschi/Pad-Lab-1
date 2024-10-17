@@ -1,0 +1,21 @@
+syntax = "proto3";
+
+package service_discovery;
+
+option go_package = "service_discovery/";
+
+service ServiceDiscovery {
+  rpc Discover (DiscoverRequest) returns (DiscoverResponse);
+}
+
+message DiscoverRequest {}
+
+message DiscoverResponse {
+  repeated Service services = 1;
+}
+
+message Service {
+  string name = 1;
+  string host = 2;
+  int32 port = 3;
+}
