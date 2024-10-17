@@ -1,5 +1,5 @@
 from flask import Flask, request, jsonify
-from flask_socketio import SocketIO, emit
+from flask_socketio import SocketIO, join_room, leave_room, send
 import mysql.connector
 import requests
 import time
@@ -183,60 +183,41 @@ def status():
     
     return jsonify({"Response": "Service B is up and running"}), 200
 
-all_lobbies = []
-users = {}
+# WebSocket event handlers
+user_rooms = {}
 
-@socketio.on('connect')
-def handle_connect():
-    print(f'Client connected with sid: {request.sid}')
+@socketio.on('join')
+def on_join(data):
+    username = data['username']
+    for user in user_rooms.values():
+        if user['username'] == username:
+            send(f'Username {username} is already taken.', to=request.sid)
+            return
+    room = data['room']
     sid = request.sid
-    users[sid] = {'username': None, 'lobby': None}  # Initialize with no username and no lobby
-    emit('message', "Welcome to the server!")
+    user_rooms[sid] = {'username': username, 'room': room}
+    join_room(room)
+    send(f'{username} has entered the room.', to=room)
 
-@socketio.on('disconnect')
-def handle_disconnect():
+@socketio.on('leave')
+def on_leave():
     sid = request.sid
-    if sid in users:
-        username = users[sid]['username']
-        lobby = users[sid]['lobby']
-        if lobby:
-            emit('message', f"{username} has disconnected")
-        print(f'Client {username} disconnected')
-        del users[sid]
+    if sid in user_rooms:
+        username = user_rooms[sid]['username']
+        room = user_rooms[sid]['room']
+        leave_room(room)
+        send(f'{username} has left the room.', to=room)
+        del user_rooms[sid]
 
-@socketio.on('join_lobby')
-def handle_join_lobby(data):
+@socketio.on('message')
+def on_message(data):
     sid = request.sid
-    lobby = data.get('lobby')
-    username = data.get('username')
-    
-    # Store username and lobby in the users dictionary
-    users[sid]['username'] = username
-    users[sid]['lobby'] = lobby
-
-    all_lobbies.append(lobby)
-    emit('message', f"{username} has joined the lobby {lobby}")
-
-@socketio.on('leave_lobby')
-def handle_leave_lobby():
-    sid = request.sid
-    username = users[sid]['username']
-    lobby = users[sid]['lobby']
-
-    if lobby in all_lobbies:
-        all_lobbies.remove(lobby)
-        emit('message', f"{username} has left the lobby {lobby}")
-        users[sid]['lobby'] = None
-
-@socketio.on('send_message')
-def handle_send_message(data):
-    sid = request.sid
-    message = data.get('message')
-    username = users[sid]['username']
-    lobby = users[sid]['lobby']
-
-    if lobby:
-        emit('message', f"{username}: {message}")
+    if sid in user_rooms:
+        room = user_rooms[sid]['room']
+        username = user_rooms[sid]['username']
+        send(f'{username}: {data["message"]}', to=room)
+    else:
+        send('You are not in a room.', to=sid)
 
 def register_service():
     service_info = {
@@ -266,5 +247,5 @@ def register_service():
                 sys.exit(1)
 
 if __name__ == '__main__':
-    # register_service()
+    register_service()
     socketio.run(app, host='0.0.0.0', port=5000, allow_unsafe_werkzeug=True)
