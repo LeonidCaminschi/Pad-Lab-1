@@ -13,8 +13,8 @@ import (
 )
 
 func main() {
-	// Start HTTP server for /register endpoint
 	http.HandleFunc("/register", server.RegisterHandler)
+	http.HandleFunc("/status", server.StatusHandler)
 	go func() {
 		log.Println("Starting HTTP server on port 5005")
 		if err := http.ListenAndServe(":5005", nil); err != nil {

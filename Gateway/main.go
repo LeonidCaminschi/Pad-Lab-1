@@ -30,9 +30,11 @@ func main() {
 	router.POST("/user/:owner", limitConcurrency(postUser))
 	router.POST("/user/:owner/:id", limitConcurrency(postUserImage))
 	router.POST("/delete/:id", limitConcurrency(postDelete))
-	router.GET("statusB", limitConcurrency(getStatusB))
+	router.GET("/statusB", limitConcurrency(getStatusB))
 
-	router.Run("localhost:5003")
+	router.GET("/status", limitConcurrency(getStatus))
+
+	router.Run("0.0.0.0:5003")
 }
 
 func limitConcurrency(handler gin.HandlerFunc) gin.HandlerFunc {
@@ -151,4 +153,10 @@ func postDelete(c *gin.Context) {
 func getStatusB(c *gin.Context) {
 	url := "http://127.0.0.1:5002/status"
 	forwardRequest(c, url, "GET")
+}
+
+/////////////////////////////////////////////////////
+
+func getStatus(c *gin.Context) {
+	c.JSON(http.StatusOK, gin.H{"status": "Gateway is up and running"})
 }
