@@ -183,62 +183,60 @@ def status():
     
     return jsonify({"Response": "Service B is up and running"}), 200
 
-# @socketio.on('connect')
-# def handle_connect():
-#     emit('message', {'data': 'Connected to the server'})
+all_lobbies = []
+users = {}
 
-# @socketio.on('disconnect')
-# def handle_disconnect():
-#     print('Client disconnected')
+@socketio.on('connect')
+def handle_connect():
+    print(f'Client connected with sid: {request.sid}')
+    sid = request.sid
+    users[sid] = {'username': None, 'lobby': None}  # Initialize with no username and no lobby
+    emit('message', "Welcome to the server!")
 
-# @socketio.on('subscribe_to_images')
-# def handle_subscribe_to_images(data):
-#     token = data.get('token')
-#     owner = data.get('owner')
+@socketio.on('disconnect')
+def handle_disconnect():
+    sid = request.sid
+    if sid in users:
+        username = users[sid]['username']
+        lobby = users[sid]['lobby']
+        if lobby:
+            emit('message', f"{username} has disconnected")
+        print(f'Client {username} disconnected')
+        del users[sid]
 
-#     username = validate_user(token)
-#     if not username:
-#         emit('error', {"Response": "Invalid token"})
-#         return
+@socketio.on('join_lobby')
+def handle_join_lobby(data):
+    sid = request.sid
+    lobby = data.get('lobby')
+    username = data.get('username')
+    
+    # Store username and lobby in the users dictionary
+    users[sid]['username'] = username
+    users[sid]['lobby'] = lobby
 
-#     isvalid = validate_subscription(token, owner)
-#     if not isvalid and owner != username:
-#         emit('error', {"Response": "User does not have permission to view images"})
-#         return
+    all_lobbies.append(lobby)
+    emit('message', f"{username} has joined the lobby {lobby}")
 
-#     connection = get_db_connection()
-#     cursor = connection.cursor()
+@socketio.on('leave_lobby')
+def handle_leave_lobby():
+    sid = request.sid
+    username = users[sid]['username']
+    lobby = users[sid]['lobby']
 
-#     cursor.execute("SELECT * FROM images WHERE username = %s", (owner,))
-#     images = cursor.fetchall()
-#     close_db_connection(cursor, connection)
+    if lobby in all_lobbies:
+        all_lobbies.remove(lobby)
+        emit('message', f"{username} has left the lobby {lobby}")
+        users[sid]['lobby'] = None
 
-#     emit('images', {"Response": images})
+@socketio.on('send_message')
+def handle_send_message(data):
+    sid = request.sid
+    message = data.get('message')
+    username = users[sid]['username']
+    lobby = users[sid]['lobby']
 
-# @socketio.on('new_image')
-# def handle_new_image(data):
-#     token = data.get('token')
-#     image = data.get('image')
-
-#     username = validate_user(token)
-#     if not username:
-#         emit('error', {"Response": "Invalid token"})
-#         return
-
-#     connection = get_db_connection()
-#     cursor = connection.cursor()
-
-#     cursor.execute("SELECT * FROM images WHERE image = %s", (image,))
-#     if cursor.fetchone():
-#         emit('error', {"Response": "Image already exists"})
-#         close_db_connection(cursor, connection)
-#         return
-
-#     cursor.execute("INSERT INTO images (username, image) VALUES (%s, %s)", (username, image))
-#     connection.commit()
-#     close_db_connection(cursor, connection)
-
-#     emit('new_image', {"Response": "Image successfully published", "image": image})
+    if lobby:
+        emit('message', f"{username}: {message}")
 
 def register_service():
     service_info = {
@@ -268,5 +266,5 @@ def register_service():
                 sys.exit(1)
 
 if __name__ == '__main__':
-    register_service()
+    # register_service()
     socketio.run(app, host='0.0.0.0', port=5000, allow_unsafe_werkzeug=True)
