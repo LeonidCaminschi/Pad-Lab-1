@@ -183,8 +183,13 @@ def status():
     
     return jsonify({"Response": "Service B is up and running"}), 200
 
+@app.route('/rooms', methods=['GET'])
+def get_rooms():
+    return jsonify(list(rooms)), 200
+
 # WebSocket event handlers
 user_rooms = {}
+rooms = set()
 
 @socketio.on('join')
 def on_join(data):
@@ -196,6 +201,7 @@ def on_join(data):
     room = data['room']
     sid = request.sid
     user_rooms[sid] = {'username': username, 'room': room}
+    rooms.add(room)
     join_room(room)
     send(f'{username} has entered the room.', to=room)
 
