@@ -3,6 +3,7 @@ import mysql.connector
 import re
 import secrets
 import time
+import socket
 
 app = Flask(__name__)
 
@@ -261,7 +262,7 @@ def status():
     except Exception as e:
         return jsonify({"Response": "Service A is down", "Error": str(e)}), 500
     
-    return jsonify({"Response": "Service A is up and running"}), 200
+    return jsonify({"Response": "Service A is up and running", "Host": socket.gethostname() }), 200
 
 if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0', port=5000)
