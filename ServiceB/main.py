@@ -177,9 +177,9 @@ def status():
         connection = get_db_connection()
         close_db_connection(connection=connection, cursor=connection.cursor())
     except Exception as e:
-        return jsonify({"Response": "Service A is down"}), 500
+        return jsonify({"Response": "Service B is down"}), 500
     
-    return jsonify({"Response": "Service A is up and running"}), 200
+    return jsonify({"Response": "Service B is up and running"}), 200
 
 # @socketio.on('connect')
 # def handle_connect():
