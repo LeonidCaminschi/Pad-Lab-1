@@ -20,6 +20,8 @@ db_config = {
     'port': 3306
 }
 
+timeout_limit = 5
+
 redis_client = redis.StrictRedis(host='redis', port=6379, db=0)
 
 def get_db_connection():
@@ -31,15 +33,29 @@ def close_db_connection(cursor, connection):
     connection.close()
 
 def validate_user(token):
-    request = requests.get(f'http://pad-lab-1-gateway-1:5003/validate-user/%s' % token)
-    if request.status_code == 200:
-        return request.json().get('username')
+    url = f'http://pad-lab-1-gateway-1:5003/validate-user/%s' % token
+    for attempt in range(3):
+        try:
+            request = requests.get(url, timeout=timeout_limit)
+            if request.status_code == 200:
+                return request.json().get('username')
+        except requests.exceptions.RequestException as e:
+            print(f"Attempt {attempt + 1} failed: {e}")
+            if attempt < 2:
+                time.sleep(timeout_limit * 3.5)
     return None
 
 def validate_subscription(token, owner):
-    request = requests.get(f'http://pad-lab-1-gateway-1:5003/validate-subscription/%s/%s' % (token, owner))
-    if request.status_code == 200:
-        return True
+    url = f'http://pad-lab-1-gateway-1:5003/validate-subscription/%s/%s' % (token, owner)
+    for attempt in range(3):
+        try:
+            request = requests.get(url, timeout=timeout_limit)
+            if request.status_code == 200:
+                return True
+        except requests.exceptions.RequestException as e:
+            print(f"Attempt {attempt + 1} failed: {e}")
+            if attempt < 2:
+                time.sleep(timeout_limit * 3.5)
     return None
 
 @app.before_request
@@ -48,8 +64,6 @@ def start_timer():
 
 @app.after_request
 def check_timeout(response):
-    # Set timeout limit (in seconds)
-    timeout_limit = 5  # For example, 5 seconds
     duration = time.time() - request.start_time
 
     # If the request took longer than the timeout limit, return a 408 response
@@ -232,7 +246,6 @@ def register_service():
         "port": 5000
     }
 
-    timeout_limit = 5  # Timeout limit in seconds
     max_retries = 3  # Number of retries
     retry_delay = 2  # Delay between retries in seconds
 
@@ -247,7 +260,7 @@ def register_service():
         except requests.exceptions.RequestException as e:
             print(f"Attempt {attempt + 1} failed: {e}")
             if attempt < max_retries - 1:
-                time.sleep(retry_delay)
+                time.sleep(retry_delay * 3.5)
             else:
                 print("All attempts to register the service failed. Exiting.")
                 sys.exit(1)

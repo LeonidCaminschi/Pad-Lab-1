@@ -273,9 +273,10 @@ def register_service():
         "port": 5000
     }
 
+    # pseudo circuit breaker xD
     timeout_limit = 5  # Timeout limit in seconds
     max_retries = 3  # Number of retries
-    retry_delay = 2  # Delay between retries in seconds
+    retry_delay = timeout_limit * 3.5  # Delay between retries in seconds
 
     for attempt in range(max_retries):
         try:
