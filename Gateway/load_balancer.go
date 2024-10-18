@@ -76,3 +76,10 @@ func (lb *LoadBalancer) GetNextService(serviceName string) Service {
 	lb.index[serviceName] = (index + 1) % len(services)
 	return service
 }
+
+func (lb *LoadBalancer) GetAllServices(serviceName string) []Service {
+	lb.mu.Lock()
+	defer lb.mu.Unlock()
+
+	return lb.services[serviceName]
+}

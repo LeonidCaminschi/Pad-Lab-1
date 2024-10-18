@@ -3,10 +3,12 @@ package main
 import (
 	"bytes"
 	"context"
-	"fmt"
+	"encoding/json"
 	"io"
+	"log"
 	"net/http"
 	"strconv"
+	"sync"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -24,7 +26,7 @@ var (
 
 func main() {
 	// Discover services at startup
-	time.Sleep(4 * time.Second)
+	time.Sleep(4 * time.Second) // time to wait for other services to start
 	loadBalancer.DiscoverServices()
 
 	router := gin.Default()
@@ -35,11 +37,15 @@ func main() {
 	router.POST("/cancel-subscription", limitConcurrency(forwardRequest("serviceA", "POST")))
 	router.GET("/validate-user/:token", limitConcurrency(forwardRequest("serviceA", "GET")))
 	router.GET("/validate-subscription/:token/:owner", limitConcurrency(forwardRequest("serviceA", "GET")))
+	router.GET("/statusA", limitConcurrency(forwardRequest("serviceA", "GET")))
 
 	router.POST("/upload", limitConcurrency(forwardRequest("serviceB", "POST")))
 	router.POST("/user/:owner", limitConcurrency(forwardRequest("serviceB", "POST")))
 	router.POST("/user/:owner/:id", limitConcurrency(forwardRequest("serviceB", "POST")))
 	router.POST("/delete/:id", limitConcurrency(forwardRequest("serviceB", "POST")))
+	router.GET("/statusB", limitConcurrency(forwardRequest("serviceB", "GET")))
+
+	router.GET("/rooms", limitConcurrency(getRooms))
 
 	router.GET("/status", limitConcurrency(getStatus))
 
@@ -69,10 +75,7 @@ func forwardRequest(serviceName, method string) gin.HandlerFunc {
 		}
 
 		url := "http://" + service.Host + ":" + strconv.Itoa(service.Port) + c.Request.URL.Path
-
-		// Print data and host
-		fmt.Printf("Request Data: %s\n", string(body))
-		fmt.Printf("Request Host: %s\n", url)
+		log.Printf("Forwarding request to URL: %s", url)
 
 		req, err := http.NewRequest(method, url, io.NopCloser(bytes.NewBuffer(body)))
 		if err != nil {
@@ -107,11 +110,70 @@ func forwardRequest(serviceName, method string) gin.HandlerFunc {
 			return
 		}
 
-		// Print response data
-		fmt.Printf("Response Data: %s\n", string(respBody))
-
 		c.Data(resp.StatusCode, "application/json", respBody)
 	}
+}
+
+func getRooms(c *gin.Context) {
+	services := loadBalancer.GetAllServices("serviceB")
+	var wg sync.WaitGroup
+	var mu sync.Mutex
+	rooms := make(map[string][]string)
+
+	for _, service := range services {
+		wg.Add(1)
+		go func(service Service) {
+			defer wg.Done()
+
+			url := "http://" + service.Host + ":" + strconv.Itoa(service.Port) + "/rooms"
+			client := &http.Client{
+				Timeout: requestTimeout,
+			}
+
+			req, err := http.NewRequest("GET", url, nil)
+			if err != nil {
+				log.Printf("Failed to create request for service %s: %v", service.Name, err)
+				return
+			}
+
+			ctx, cancel := context.WithTimeout(context.Background(), requestTimeout)
+			defer cancel()
+
+			req = req.WithContext(ctx)
+
+			resp, err := client.Do(req)
+			if err != nil {
+				log.Printf("Failed to send request to service %s: %v", service.Name, err)
+				return
+			}
+			defer resp.Body.Close()
+
+			if resp.StatusCode != http.StatusOK {
+				log.Printf("Service %s returned non-OK status: %d", service.Name, resp.StatusCode)
+				return
+			}
+
+			respBody, err := io.ReadAll(resp.Body)
+			if err != nil {
+				log.Printf("Failed to read response from service %s: %v", service.Name, err)
+				return
+			}
+
+			var serviceRooms []string
+			if err := json.Unmarshal(respBody, &serviceRooms); err != nil {
+				log.Printf("Failed to unmarshal response from service %s: %v", service.Name, err)
+				return
+			}
+
+			mu.Lock()
+			rooms[service.Host] = serviceRooms
+			mu.Unlock()
+		}(service)
+	}
+
+	wg.Wait()
+
+	c.JSON(http.StatusOK, rooms)
 }
 
 func getStatus(c *gin.Context) {
