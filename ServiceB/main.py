@@ -246,9 +246,9 @@ def register_service():
     external_port = container.attrs['NetworkSettings']['Ports']['5000/tcp'][0]['HostPort']
     
     service_info = {
-        "name": "serviceA",
+        "name": "serviceB",
         "host": socket.gethostname(),
-        "port": external_port
+        "port": int(external_port)
     }
 
     max_retries = 3  # Number of retries

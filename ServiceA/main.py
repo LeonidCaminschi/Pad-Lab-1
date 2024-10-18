@@ -275,7 +275,7 @@ def register_service():
     service_info = {
         "name": "serviceA",
         "host": socket.gethostname(),
-        "port": external_port
+        "port": int(external_port)
     }
 
     # pseudo circuit breaker xD
@@ -285,14 +285,13 @@ def register_service():
 
     for attempt in range(max_retries):
         try:
-            response = requests.post('http://pad-lab-1-service-discovery-1:5005/register', json=jsonify(service_info))
+            response = requests.post('http://pad-lab-1-service-discovery-1:5005/register', json=service_info, timeout=timeout_limit)
             if response.status_code == 200:
                 print("Service registered successfully")
                 break
             else:
                 print(f"Failed to register service, status code: {response.status_code}")
                 print(service_info)
-                print(response.text)
         except requests.exceptions.RequestException as e:
             print(f"Attempt {attempt + 1} failed: {e}")
             if attempt < max_retries - 1:
