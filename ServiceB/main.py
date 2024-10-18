@@ -31,13 +31,13 @@ def close_db_connection(cursor, connection):
     connection.close()
 
 def validate_user(token):
-    request = requests.get(f'http://127.0.0.1:5001/validate-user/%s' % token)
+    request = requests.get(f'http://pad-lab-1-gateway-1:5003/validate-user/%s' % token)
     if request.status_code == 200:
         return request.json().get('username')
     return None
 
 def validate_subscription(token, owner):
-    request = requests.get(f'http://127.0.0.1:5001/validate-subscription/%s/%s' % (token, owner))
+    request = requests.get(f'http://pad-lab-1-gateway-1:5003/validate-subscription/%s/%s' % (token, owner))
     if request.status_code == 200:
         return True
     return None
