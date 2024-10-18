@@ -53,9 +53,11 @@ services:
     depends_on:
       - db1
     deploy:
-      replicas: 2
+      replicas: 1
     ports:
       - '5000'
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
 
   serviceB:
     image: serviceb:latest
@@ -69,9 +71,11 @@ services:
       - db2
       - redis
     deploy:
-      replicas: 2
+      replicas: 1
     ports:
       - '5000'
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
 
   gateway:
     build: ./Gateway

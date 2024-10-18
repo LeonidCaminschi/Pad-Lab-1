@@ -3,3 +3,4 @@ mysql-connector-python
 flask-caching
 redis
 requests
+docker

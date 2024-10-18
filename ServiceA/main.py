@@ -6,6 +6,7 @@ import time
 import socket
 import requests
 import sys
+import docker
 
 app = Flask(__name__)
 
@@ -267,10 +268,14 @@ def status():
     return jsonify({"Response": "Service A is up and running", "Host": socket.gethostname() }), 200
 
 def register_service():
+    client = docker.from_env()
+    container = client.containers.get(socket.gethostname())
+    external_port = container.attrs['NetworkSettings']['Ports']['5000/tcp'][0]['HostPort']
+    
     service_info = {
         "name": "serviceA",
         "host": socket.gethostname(),
-        "port": 5000
+        "port": external_port
     }
 
     # pseudo circuit breaker xD
@@ -280,12 +285,14 @@ def register_service():
 
     for attempt in range(max_retries):
         try:
-            response = requests.post('http://pad-lab-1-service-discovery-1:5005/register', json=service_info, timeout=timeout_limit)
+            response = requests.post('http://pad-lab-1-service-discovery-1:5005/register', json=jsonify(service_info))
             if response.status_code == 200:
                 print("Service registered successfully")
                 break
             else:
                 print(f"Failed to register service, status code: {response.status_code}")
+                print(service_info)
+                print(response.text)
         except requests.exceptions.RequestException as e:
             print(f"Attempt {attempt + 1} failed: {e}")
             if attempt < max_retries - 1:

@@ -6,6 +6,7 @@ import time
 import redis
 import socket
 import sys
+import docker
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'your_secret_key'
@@ -240,10 +241,14 @@ def on_message(data):
         send('You are not in a room.', to=sid)
 
 def register_service():
+    client = docker.from_env()
+    container = client.containers.get(socket.gethostname())
+    external_port = container.attrs['NetworkSettings']['Ports']['5000/tcp'][0]['HostPort']
+    
     service_info = {
-        "name": "serviceB",
+        "name": "serviceA",
         "host": socket.gethostname(),
-        "port": 5000
+        "port": external_port
     }
 
     max_retries = 3  # Number of retries
@@ -257,6 +262,7 @@ def register_service():
                 break
             else:
                 print(f"Failed to register service, status code: {response.status_code}")
+                print(service_info)
         except requests.exceptions.RequestException as e:
             print(f"Attempt {attempt + 1} failed: {e}")
             if attempt < max_retries - 1:

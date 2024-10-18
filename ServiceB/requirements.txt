@@ -4,3 +4,4 @@ flask-caching
 redis
 requests
 flask_socketio
+docker
