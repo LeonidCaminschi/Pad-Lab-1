@@ -59,3 +59,9 @@ func StatusHandler(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(response)
 }
+
+func GetRegisteredServices() []Service {
+	mu.Lock()
+	defer mu.Unlock()
+	return services
+}
