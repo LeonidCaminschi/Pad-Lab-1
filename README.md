@@ -407,3 +407,33 @@ Status code 400:
 # 5) Deployment and Scaling
 
 Docker container will be used to separate services and other important structures, also docker compose will be used to scale horizontaly to the needs of the administrator or the system.
+
+# Pad-Lab-2
+# 1) Deployment
+1. cd Gateway/
+2. protoc --go_out=. --go-grpc_out=. service_discovery.proto
+3. cd ../service_discovery/
+4. protoc --go_out=. --go-grpc_out=. service_discovery.proto
+5. cd ../ServiceA
+6. docker build -t servicea:latest .
+7. cd ../ServiceB
+8. docker build -t serviceb:latest .
+9. cd ..
+10. docker compose up --build
+
+# 2) Updated Diagram
+
+![Diagram](/FIA_LAB_2.png "UML Diagram")
+
+# 3) Changes
+
+2. Add to circuit breaker to keep track of ~300 requests not only 500 response code (should be easy enough)
+3. Mostly working as intended i think it was implemented in the Part 1 of the lab the single change is to add automatic restart on fail
+4. Implement Centralized logging + processing of the logged data + output to visualized data graphs or whatnot
+5. Implementation of a new endpoint delete user which is going to access both databases in order to delete user on ServiceA and its info after which is going to make sure the data was deleted and then continue to delete the data from the other database or rollback if an error ocurred
+6. Either move to Memcached or make a external system to consitent hash the data within redis
+7. skip mark 7 because i want mark 9
+8. From what i saw Saga is basically a ping pong of requests where if the request fails it calls another method to reinburs the user
+9. just create replication leader election should work good enough
+10. Create data warehouse which gets update from time to time with all the utmost important data (Single source of truth i suppose)
+
