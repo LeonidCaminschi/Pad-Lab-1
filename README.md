@@ -423,7 +423,7 @@ Docker container will be used to separate services and other important structure
 
 # 2) Updated Diagram
 
-![Diagram](/FIA_LAB_2.png "UML Diagram")
+![Diagram](/PAD_LAB_2.png "UML Diagram")
 
 # 3) Changes
 
