@@ -51,6 +51,7 @@ func main() {
 	router.GET("/rooms", limitConcurrency(getRooms))
 
 	router.GET("/status", limitConcurrency(getStatus))
+	router.POST("/erase_user", limitConcurrency(postDeleteUser))
 
 	router.Run("0.0.0.0:5003")
 }
@@ -202,4 +203,45 @@ func getRooms(c *gin.Context) {
 
 func getStatus(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"status": "Gateway is up and running"})
+}
+
+func postDeleteUser(c *gin.Context) {
+	services := []string{"serviceA", "serviceB"}
+	endpoints := []string{"/prepare_erase_user", "/commit_erase_user"}
+
+	body, err := io.ReadAll(c.Request.Body)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request body"})
+		return
+	}
+
+	for _, endpoint := range endpoints {
+		for _, service := range services {
+			url := "http://" + loadBalancer.GetNextService(service).Host + ":5000" + endpoint
+			req, err := http.NewRequest("POST", url, bytes.NewBuffer(body))
+			if err != nil {
+				log.Printf("Error creating request to %s: %v", service, err)
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
+				return
+			}
+			req.Header.Set("Content-Type", "application/json")
+
+			client := &http.Client{}
+			resp, err := client.Do(req)
+			if err != nil {
+				log.Printf("Error making request to %s: %v", service, err)
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
+				return
+			}
+			defer resp.Body.Close()
+
+			if resp.StatusCode != http.StatusOK {
+				log.Printf("Failed to %s on %s, status code: %d", endpoint, service, resp.StatusCode)
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to process request"})
+				return
+			}
+		}
+	}
+
+	c.JSON(http.StatusOK, gin.H{"response": "User data prepared and erased successfully"})
 }

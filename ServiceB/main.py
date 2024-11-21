@@ -265,6 +265,51 @@ def register_service():
                 print("All attempts to register the service failed. Exiting.")
                 sys.exit(1)
 
+@app.route('/prepare_erase_user', methods=['POST'])
+def prepare_erase_user():
+    data = request.json
+    username = data.get('username')
+
+    if not username:
+        return jsonify({"Response": "Username not provided"}), 400
+
+    connection = get_db_connection()
+    cursor = connection.cursor()
+
+    cursor.execute("SELECT * FROM images WHERE username = %s", (username,))
+    images = cursor.fetchall()
+
+    close_db_connection(cursor, connection)
+
+    if images:
+        return jsonify({"Response": "Data available for erasure", "Images": images}), 200
+    else:
+        return jsonify({"Response": "No data found for the given username"}), 200
+
+@app.route('/commit_erase_user', methods=['POST'])
+def commit_erase_user():
+    data = request.json
+    username = data.get('username')
+
+    if not username:
+        return jsonify({"Response": "Username not provided"}), 400
+
+    connection = get_db_connection()
+    cursor = connection.cursor()
+
+    try:
+        cursor.execute("DELETE FROM images WHERE username = %s", (username,))
+        connection.commit()
+
+        # Invalidate the cache
+        redis_client.delete(f'images_{username}')
+
+        close_db_connection(cursor, connection)
+        return jsonify({"Response": "Data erased successfully"}), 200
+    except Exception as e:
+        close_db_connection(cursor, connection)
+        return jsonify({"Response": "Failed to erase data", "Error": str(e)}), 500
+
 if __name__ == '__main__':
     register_service()
     socketio.run(app, host='0.0.0.0', port=5000, allow_unsafe_werkzeug=True)
