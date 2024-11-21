@@ -71,68 +71,70 @@ func forwardRequest(serviceName, method string) gin.HandlerFunc {
 			return
 		}
 
-		service := loadBalancer.GetNextService(serviceName)
-		if service.Name == "" {
+		services := loadBalancer.GetAllServices(serviceName)
+		if len(services) == 0 {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "No available services"})
 			return
 		}
 
-		url := "http://" + service.Host + ":" + strconv.Itoa(service.Port) + c.Request.URL.Path
-		log.Println("Forwarding request to URL:", url)
-
-		for i := 0; i < circuitBreakerThreshold; i++ {
+		for _, service := range services {
 			if circuitBreaker.IsTripped(service) {
-				c.JSON(http.StatusServiceUnavailable, gin.H{"error": "Service " + service.Name + " is temporarily unavailable"})
-				return
+				log.Printf("All services for %s are down", service.Name)
+				continue
 			}
 
-			req, err := http.NewRequest(method, url, io.NopCloser(bytes.NewBuffer(body)))
-			if err != nil {
-				c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create request"})
-				return
-			}
-			req.Header.Set("Content-Type", "application/json")
+			url := "http://" + service.Host + ":" + strconv.Itoa(service.Port) + c.Request.URL.Path
+			log.Println("Forwarding request to URL:", url)
 
-			client := &http.Client{
-				Timeout: requestTimeout,
-			}
-
-			ctx, cancel := context.WithTimeout(context.Background(), requestTimeout)
-			defer cancel()
-
-			req = req.WithContext(ctx)
-
-			resp, err := client.Do(req)
-			if err != nil {
-				if ctx.Err() == context.DeadlineExceeded {
-					c.JSON(http.StatusRequestTimeout, gin.H{"error": "Request timed out"})
-				} else {
-					c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to send request"})
+			for i := 0; i < circuitBreakerThreshold; i++ {
+				req, err := http.NewRequest(method, url, io.NopCloser(bytes.NewBuffer(body)))
+				if err != nil {
+					c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create request"})
+					return
 				}
-				circuitBreaker.RecordFailure(service)
-				continue
-			}
-			defer resp.Body.Close()
+				req.Header.Set("Content-Type", "application/json")
 
-			if resp.StatusCode >= 500 /*|| true*/ {
-				circuitBreaker.RecordFailure(service)
-				time.Sleep(circuitBreakerWindow)
-				continue
-			}
+				client := &http.Client{
+					Timeout: requestTimeout,
+				}
 
-			respBody, err := io.ReadAll(resp.Body)
-			if err != nil {
-				c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to read response"})
+				ctx, cancel := context.WithTimeout(context.Background(), requestTimeout)
+				defer cancel()
+
+				req = req.WithContext(ctx)
+
+				resp, err := client.Do(req)
+				if err != nil {
+					if ctx.Err() == context.DeadlineExceeded {
+						c.JSON(http.StatusRequestTimeout, gin.H{"error": "Request timed out"})
+					} else {
+						c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to send request"})
+					}
+					circuitBreaker.RecordFailure(service)
+					continue
+				}
+				defer resp.Body.Close()
+
+				if resp.StatusCode >= 500 {
+					circuitBreaker.RecordFailure(service)
+					time.Sleep(circuitBreakerWindow)
+					continue
+				}
+
+				respBody, err := io.ReadAll(resp.Body)
+				if err != nil {
+					c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to read response"})
+					return
+				}
+
+				circuitBreaker.Reset(service)
+				c.Data(resp.StatusCode, "application/json", respBody)
 				return
 			}
-
-			circuitBreaker.Reset(service)
-			c.Data(resp.StatusCode, "application/json", respBody)
-			return
 		}
 
-		log.Printf("Circuit breaker tripped for service %s", service.Name)
-		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "Service is temporarily unavailable"})
+		log.Printf("All services for %s are down", serviceName)
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "All services are temporarily unavailable"})
 	}
 }
 
