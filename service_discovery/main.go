@@ -46,7 +46,7 @@ func main() {
 		}
 	}()
 
-	go startPeriodicPing()
+	//go startPeriodicPing()
 
 	select {}
 }
