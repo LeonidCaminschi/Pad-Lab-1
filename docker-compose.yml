@@ -31,14 +31,32 @@ services:
       - DB-B:/var/lib/mysql
     hostname: db2
 
-  redis:
+  redis1:
     image: redis:latest
     restart: always
     ports:
       - '6666:6379'
     volumes:
       - redis-data:/data
-    hostname: redis
+    hostname: redis1
+
+  redis2:
+    image: redis:latest
+    restart: always
+    ports:
+      - '6667:6379'
+    volumes:
+      - redis-data:/data
+    hostname: redis2
+
+  redis3:
+    image: redis:latest
+    restart: always
+    ports:
+      - '6668:6379'
+    volumes:
+      - redis-data:/data
+    hostname: redis3
 
   servicea:
     build: ./ServiceA
@@ -65,7 +83,10 @@ services:
       - REDIS_PORT=6379
     depends_on:
       - db2
-      - redis
+      - redis1
+      - redis2
+      - redis3
+      - redis-consistent-hashing
     deploy:
       replicas: 2
     ports:
@@ -85,6 +106,13 @@ services:
       - '5005:5005'
       - '50051:50051'
     hostname: service-discovery
+
+  redis-consistent-hashing:
+    build: ./RedisConsistentHashing
+    restart: always
+    ports:
+      - '5006:5006'
+    hostname: redis-consistent-hashing
 
 volumes:
   DB-A:

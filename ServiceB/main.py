@@ -22,8 +22,6 @@ db_config = {
 
 timeout_limit = 5
 
-redis_client = redis.StrictRedis(host='redis', port=6379, db=0)
-
 def get_db_connection():
     connection = mysql.connector.connect(**db_config)
     return connection
@@ -106,7 +104,8 @@ def get_images(owner):
     token = data.get('user')
 
     # Check Redis cache first
-    cached_images = redis_client.get(f'images_{owner}')
+    response = requests.get(f'http://redis-consistent-hashing:5006/retrieve_key?key=images_{owner}')
+    cached_images = response.json().get('value') if response.status_code == 200 else None
     if cached_images:
         return jsonify({"Response": eval(cached_images)}), 200
 
@@ -120,7 +119,7 @@ def get_images(owner):
         close_db_connection(cursor, connection)
 
         # Store the result in Redis
-        redis_client.set(f'images_{owner}', str(images))
+        requests.post('http://redis-consistent-hashing:5006/store_key', json={"key": f'images_{owner}', "value": str(images)})
 
         return jsonify({"Response": images}), 200
 
@@ -133,7 +132,8 @@ def get_image(owner, image):
     token = data.get('user')
 
     # Check Redis cache first
-    cached_image = redis_client.get(f'image_{image}')
+    response = requests.get(f'http://redis-consistent-hashing:5006/retrieve_key?key=images_{owner}')
+    cached_image = response.json().get('value') if response.status_code == 200 else None
     if cached_image:
         return jsonify({"Response": eval(cached_image)}), 200
 
@@ -151,7 +151,7 @@ def get_image(owner, image):
         close_db_connection(cursor, connection)
 
         # Store the result in Redis
-        redis_client.set(f'image_{image}', str(image))
+        requests.post('http://redis-consistent-hashing:5006/store_key', json={"key": f'images_{owner}', "value": str(image)})
 
         return jsonify({"Response": image}), 200
 
@@ -177,9 +177,7 @@ def delete_image(image):
         cursor.execute("DELETE FROM images WHERE image = %s", (image,))
         connection.commit()
 
-        # Invalidate the cache
-        redis_client.delete(f'image_{image}')
-        redis_client.delete(f'images_{username[0]}')
+        requests.delete(f'http://redis-consistent-hashing:5006/delete_key?key=images_{username[0]}')
 
         close_db_connection(cursor, connection)
         return jsonify({"Response": "Image successfully deleted"}), 200
@@ -302,7 +300,7 @@ def commit_erase_user():
         connection.commit()
 
         # Invalidate the cache
-        redis_client.delete(f'images_{username}')
+        requests.delete(f'http://redis-consistent-hashing:5006/delete_key?key=images_{username}')
 
         close_db_connection(cursor, connection)
         return jsonify({"Response": "Data erased successfully"}), 200

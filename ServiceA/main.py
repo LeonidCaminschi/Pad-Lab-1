@@ -73,7 +73,7 @@ def register():
     connection.commit()
     close_db_connection(connection=connection, cursor=cursor)
     
-    return jsonify({"Response": "Account created"}), 500
+    return jsonify({"Response": "Account created"}), 200
 
 @app.route('/login', methods=['POST'])
 def login():
