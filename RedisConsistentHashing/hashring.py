@@ -3,7 +3,7 @@ import bisect
 from redis import Redis
 
 class ConsistentHashRing:
-    def __init__(self, replicas=100):
+    def __init__(self, replicas=3):
         """
         Initialize the consistent hash ring.
 
