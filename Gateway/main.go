@@ -80,7 +80,7 @@ func forwardRequest(serviceName, method string) gin.HandlerFunc {
 
 		for _, service := range services {
 			if circuitBreaker.IsTripped(service) {
-				log.Printf("All services for %s are down", service.Name)
+				log.Printf("All endpoints for %s are down", service.Name)
 				continue
 			}
 
