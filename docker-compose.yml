@@ -63,6 +63,28 @@ services:
       - DB-B:/var/lib/mysql
     hostname: db2
 
+  db-wearhouse:
+    image: mysql:5.7
+    restart: always
+    environment:
+      MYSQL_USER: 'user'
+      MYSQL_PASSWORD: 'password'
+      MYSQL_ROOT_PASSWORD: ''
+      MYSQL_ALLOW_EMPTY_PASSWORD: 'yes'
+    ports:
+      - '3311:3306'
+    expose:
+      - '3306'
+    volumes:
+      - DB-WEARHOUSE:/var/lib/mysql
+    hostname: wearhouse
+
+  etl-job:
+    build: ./DataWearhouse
+    restart: always
+    depends_on:
+      - db-wearhouse
+
   redis1:
     image: redis:latest
     restart: always
@@ -183,4 +205,5 @@ volumes:
   DB-A-1:
   DB-A-2:
   DB-B:
+  DB-WEARHOUSE:
   redis-data:
