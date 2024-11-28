@@ -206,41 +206,82 @@ func getStatus(c *gin.Context) {
 }
 
 func postDeleteUser(c *gin.Context) {
-	services := []string{"serviceA", "serviceB"}
-	endpoints := []string{"/prepare_erase_user", "/commit_erase_user"}
-
 	body, err := io.ReadAll(c.Request.Body)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request body"})
 		return
 	}
 
-	for _, endpoint := range endpoints {
-		for _, service := range services {
-			url := "http://" + loadBalancer.GetNextService(service).Host + ":5000" + endpoint
-			req, err := http.NewRequest("POST", url, bytes.NewBuffer(body))
-			if err != nil {
-				log.Printf("Error creating request to %s: %v", service, err)
-				c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
-				return
-			}
-			req.Header.Set("Content-Type", "application/json")
+	url := "http://" + loadBalancer.GetNextService("serviceA").Host + ":5000" + "/commit_erase_user"
+	req, err := http.NewRequest("POST", url, bytes.NewBuffer(body))
+	if err != nil {
+		log.Printf("Error creating request to %s: %v", url, err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
+		return
+	}
+	req.Header.Set("Content-Type", "application/json")
 
-			client := &http.Client{}
-			resp, err := client.Do(req)
-			if err != nil {
-				log.Printf("Error making request to %s: %v", service, err)
-				c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
-				return
-			}
-			defer resp.Body.Close()
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		log.Printf("Error making request to %s: %v", url, err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
+		return
+	}
+	defer resp.Body.Close()
 
-			if resp.StatusCode != http.StatusOK {
-				log.Printf("Failed to %s on %s, status code: %d", endpoint, service, resp.StatusCode)
-				c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to process request"})
-				return
-			}
+	if resp.StatusCode != http.StatusOK {
+		log.Printf("Failed to %s on %s, status code: %d", "/commit_erase_user", url, resp.StatusCode)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to process request"})
+		return
+	}
+
+	url = "http://" + loadBalancer.GetNextService("serviceB").Host + ":5000" + "/commit_erase_user"
+	req, err = http.NewRequest("POST", url, bytes.NewBuffer(body))
+	if err != nil {
+		log.Printf("Error creating request to %s: %v", url, err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
+		return
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	client = &http.Client{}
+	resp, err = client.Do(req)
+	if err != nil {
+		log.Printf("Error making request to %s: %v", url, err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
+		return
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusOK {
+		log.Printf("Failed to %s on %s, status code: %d", "/commit_erase_user", url, resp.StatusCode)
+
+		rollbackURL := "http://" + loadBalancer.GetNextService("serviceA").Host + ":5000" + "/rollback_erase_user"
+		rollbackReq, err := http.NewRequest("POST", rollbackURL, bytes.NewBuffer(body))
+		if err != nil {
+			log.Printf("Error creating rollback request to %s: %v", rollbackURL, err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
+			return
 		}
+		rollbackReq.Header.Set("Content-Type", "application/json")
+
+		rollbackResp, err := client.Do(rollbackReq)
+		if err != nil {
+			log.Printf("Error making rollback request to %s: %v", rollbackURL, err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
+			return
+		}
+		defer rollbackResp.Body.Close()
+
+		if rollbackResp.StatusCode != http.StatusOK {
+			log.Printf("Failed to %s on %s, status code: %d", "/rollback_erase_user", rollbackURL, rollbackResp.StatusCode)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to rollback request"})
+			return
+		}
+
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to process request"})
+		return
 	}
 
 	c.JSON(http.StatusOK, gin.H{"response": "User data prepared and erased successfully"})

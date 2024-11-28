@@ -21,6 +21,8 @@ db_config = {
     'port': 3306
 }
 
+backups = {}
+
 # Establish MySQL connection
 def get_db_connection():
     connection = mysql.connector.connect(**db_config)
@@ -64,7 +66,7 @@ def register():
     password = data.get('password')
     
     if not username or not password:
-        return jsonify({"Response": "Username and password cannot be empty"}), 500
+        return jsonify({"Response": "Username and password cannot be empty"}), 401
     
     if not is_valid_username_password(username, password):
         return jsonify({"Response": "Invalid character-use \".|/ please use only alphanumerical values"}), 401
@@ -74,13 +76,13 @@ def register():
     cursor.execute("SELECT * FROM users WHERE username = %s", (username,))
     if cursor.fetchone():
         close_db_connection(connection=connection, cursor=cursor)
-        return jsonify({"Response": "username already exists"}), 500
+        return jsonify({"Response": "username already exists"}), 401
     
     cursor.execute("INSERT INTO users (username, password) VALUES (%s, %s)", (username, password))
     connection.commit()
     close_db_connection(connection=connection, cursor=cursor)
     
-    return jsonify({"Response": "Account created"}), 500
+    return jsonify({"Response": "Account created"}), 200
 
 @app.route('/login', methods=['POST'])
 def login():
@@ -301,52 +303,9 @@ def register_service():
                 print("All attempts to register the service failed. Exiting.")
                 sys.exit(1)
 
-@app.route('/prepare_erase_user', methods=['POST'])
-def prepare_erase_user():
-    data = request.json
-    username = data.get('username')
-    
-    if not username:
-        return jsonify({"Response": "Username cannot be empty"}), 400
-    
-    connection = get_db_connection()
-    cursor = connection.cursor()
-    
-    try:
-        # Check if user exists in all tables
-        cursor.execute("SELECT * FROM users WHERE username = %s", (username,))
-        user_exists = cursor.fetchone()
-        
-        cursor.execute("SELECT * FROM tokens WHERE username = %s", (username,))
-        tokens_exist = cursor.fetchall()
-        
-        cursor.execute("SELECT * FROM billing WHERE username = %s", (username,))
-        billing_exists = cursor.fetchall()
-        
-        cursor.execute("SELECT * FROM subscription WHERE sender = %s OR owner = %s", (username, username))
-        subscriptions_exist = cursor.fetchall()
-        
-        if not user_exists:
-            close_db_connection(connection=connection, cursor=cursor)
-            return jsonify({"Response": "User does not exist"}), 404
-        
-        # Mark data for deletion (this could be implemented as needed)
-        # For now, just return the data that will be deleted
-        data_to_delete = {
-            "users": user_exists,
-            "tokens": tokens_exist,
-            "billing": billing_exists,
-            "subscriptions": subscriptions_exist
-        }
-        
-        close_db_connection(connection=connection, cursor=cursor)
-        return jsonify({"Response": "Data prepared for erasure", "Data": data_to_delete}), 200
-    except Exception as e:
-        close_db_connection(connection=connection, cursor=cursor)
-        return jsonify({"Response": "Failed to prepare data for erasure", "Error": str(e)}), 500
-
 @app.route('/commit_erase_user', methods=['POST'])
 def commit_erase_user():
+    global backups
     data = request.json
     username = data.get('username')
     
@@ -357,6 +316,25 @@ def commit_erase_user():
     cursor = connection.cursor()
     
     try:
+        cursor.execute("SELECT * FROM tokens WHERE username = %s", (username,))
+        tokens_backup = cursor.fetchall()
+        
+        cursor.execute("SELECT * FROM billing WHERE username = %s", (username,))
+        billing_backup = cursor.fetchall()
+        
+        cursor.execute("SELECT * FROM subscription WHERE sender = %s OR owner = %s", (username, username))
+        subscription_backup = cursor.fetchall()
+        
+        cursor.execute("SELECT * FROM users WHERE username = %s", (username,))
+        users_backup = cursor.fetchall()
+        
+        backups[username] = {
+            "tokens": tokens_backup,
+            "billing": billing_backup,
+            "subscription": subscription_backup,
+            "users": users_backup
+        }
+        
         # Delete user data from all tables
         cursor.execute("DELETE FROM tokens WHERE username = %s", (username,))
         cursor.execute("DELETE FROM billing WHERE username = %s", (username,))
@@ -370,6 +348,42 @@ def commit_erase_user():
         connection.rollback()
         close_db_connection(connection=connection, cursor=cursor)
         return jsonify({"Response": "Failed to erase data", "Error": str(e)}), 500
+
+@app.route('/rollback_erase_user', methods=['POST'])
+def rollback_erase_user():
+    global backups
+    data = request.json
+    username = data.get('username')
+    
+    if not username:
+        return jsonify({"Response": "Username cannot be empty"}), 400
+    
+    if username not in backups:
+        return jsonify({"Response": f"No backup found for the given username: {username}, {backups}"}), 400
+    
+    connection = get_db_connection()
+    cursor = connection.cursor()
+
+    try:
+        for token in backups[username]["tokens"]:
+            cursor.execute("INSERT INTO tokens VALUES (%s, %s, %s)", token)
+        
+        for billing in backups[username]["billing"]:
+            cursor.execute("INSERT INTO billing VALUES (%s, %s, %s, %s)", billing)
+        
+        for subscription in backups[username]["subscription"]:
+            cursor.execute("INSERT INTO subscription VALUES (%s, %s, %s)", subscription)
+        
+        for user in backups[username]["users"]:
+            cursor.execute("INSERT INTO users VALUES (%s, %s, %s, %s)", user)
+        
+        connection.commit()
+        close_db_connection(connection=connection, cursor=cursor)
+        return jsonify({"Response": "Data restored successfully"}), 200
+    except Exception as e:
+        connection.rollback()
+        close_db_connection(connection=connection, cursor=cursor)
+        return jsonify({"Response": "Failed to restore data", "Error": str(e)}), 500
 
 if __name__ == '__main__':
     register_service()

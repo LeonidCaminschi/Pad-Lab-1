@@ -271,27 +271,6 @@ def register_service():
                 print("All attempts to register the service failed. Exiting.")
                 sys.exit(1)
 
-@app.route('/prepare_erase_user', methods=['POST'])
-def prepare_erase_user():
-    data = request.json
-    username = data.get('username')
-
-    if not username:
-        return jsonify({"Response": "Username not provided"}), 400
-
-    connection = get_db_connection()
-    cursor = connection.cursor()
-
-    cursor.execute("SELECT * FROM images WHERE username = %s", (username,))
-    images = cursor.fetchall()
-
-    close_db_connection(cursor, connection)
-
-    if images:
-        return jsonify({"Response": "Data available for erasure", "Images": images}), 200
-    else:
-        return jsonify({"Response": "No data found for the given username"}), 200
-
 @app.route('/commit_erase_user', methods=['POST'])
 def commit_erase_user():
     data = request.json
