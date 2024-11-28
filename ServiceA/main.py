@@ -7,7 +7,10 @@ import socket
 import requests
 import sys
 
+from prometheus_flask_exporter import PrometheusMetrics
+
 app = Flask(__name__)
+metrics = PrometheusMetrics(app)
 
 # MySQL configuration
 db_config = {
@@ -49,6 +52,10 @@ def check_timeout(response):
         return response
 
     return response
+
+@app.route('/metrics')
+def metrics():
+    return metrics.registry.generate_latest(), 200
 
 @app.route('/register', methods=['POST'])
 def register():
@@ -366,4 +373,4 @@ def commit_erase_user():
 
 if __name__ == '__main__':
     register_service()
-    app.run(debug=True, host='0.0.0.0', port=5000)
+    app.run(debug=False, host='0.0.0.0', port=5000)

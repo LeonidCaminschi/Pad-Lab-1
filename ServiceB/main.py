@@ -7,7 +7,11 @@ import redis
 import socket
 import sys
 
+from prometheus_flask_exporter import PrometheusMetrics
+
 app = Flask(__name__)
+metrics = PrometheusMetrics(app)
+
 app.config['SECRET_KEY'] = 'your_secret_key'
 socketio = SocketIO(app)
 
@@ -72,6 +76,10 @@ def check_timeout(response):
         return response
 
     return response
+
+@app.route('/metrics')
+def metrics():
+    return metrics.registry.generate_latest(), 200
 
 @app.route('/upload', methods=['POST'])
 def upload():

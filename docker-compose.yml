@@ -35,7 +35,7 @@ services:
     image: redis:latest
     restart: always
     ports:
-      - '6666:6379'
+      - '6669:6379'
     volumes:
       - redis-data:/data
     hostname: redis1
@@ -113,6 +113,25 @@ services:
     ports:
       - '5006:5006'
     hostname: redis-consistent-hashing
+    depends_on:
+      - redis1
+      - redis2
+      - redis3
+
+  prometheus:
+    image: prom/prometheus:latest
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+    ports:
+      - "9090:9090"
+
+  grafana:
+    image: grafana/grafana:latest
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
 
 volumes:
   DB-A:
