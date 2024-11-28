@@ -212,10 +212,10 @@ func postDeleteUser(c *gin.Context) {
 		return
 	}
 
-	url := "http://" + loadBalancer.GetNextService("serviceA").Host + ":5000" + "/commit_erase_user"
-	req, err := http.NewRequest("POST", url, bytes.NewBuffer(body))
+	urlA := "http://" + loadBalancer.GetNextService("serviceA").Host + ":5000" + "/commit_erase_user"
+	req, err := http.NewRequest("POST", urlA, bytes.NewBuffer(body))
 	if err != nil {
-		log.Printf("Error creating request to %s: %v", url, err)
+		log.Printf("Error creating request to %s: %v", urlA, err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
 		return
 	}
@@ -223,23 +223,27 @@ func postDeleteUser(c *gin.Context) {
 
 	client := &http.Client{}
 	resp, err := client.Do(req)
+
+	respBody, err := io.ReadAll(resp.Body)
+	print("Response: " + string(respBody))
+
 	if err != nil {
-		log.Printf("Error making request to %s: %v", url, err)
+		log.Printf("Error making request to %s: %v", urlA, err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
 		return
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		log.Printf("Failed to %s on %s, status code: %d", "/commit_erase_user", url, resp.StatusCode)
+		log.Printf("Failed to %s on %s, status code: %d", "/commit_erase_user", urlA, resp.StatusCode)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to process request"})
 		return
 	}
 
-	url = "http://" + loadBalancer.GetNextService("serviceB").Host + ":5000" + "/commit_erase_user"
-	req, err = http.NewRequest("POST", url, bytes.NewBuffer(body))
+	urlB := "http://" + loadBalancer.GetNextService("serviceB").Host + ":5000" + "/commit_erase_user"
+	req, err = http.NewRequest("POST", urlB, bytes.NewBuffer(body))
 	if err != nil {
-		log.Printf("Error creating request to %s: %v", url, err)
+		log.Printf("Error creating request to %s: %v", urlB, err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
 		return
 	}
@@ -248,19 +252,18 @@ func postDeleteUser(c *gin.Context) {
 	client = &http.Client{}
 	resp, err = client.Do(req)
 	if err != nil {
-		log.Printf("Error making request to %s: %v", url, err)
+		log.Printf("Error making request to %s: %v", urlB, err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
 		return
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode == http.StatusOK {
-		log.Printf("Failed to %s on %s, status code: %d", "/commit_erase_user", url, resp.StatusCode)
+	if resp.StatusCode != http.StatusOK {
+		log.Printf("Failed to %s on %s, status code: %d", "/commit_erase_user", urlB, resp.StatusCode)
 
-		rollbackURL := "http://" + loadBalancer.GetNextService("serviceA").Host + ":5000" + "/rollback_erase_user"
-		rollbackReq, err := http.NewRequest("POST", rollbackURL, bytes.NewBuffer(body))
+		rollbackReq, err := http.NewRequest("POST", urlA, bytes.NewBuffer(body))
 		if err != nil {
-			log.Printf("Error creating rollback request to %s: %v", rollbackURL, err)
+			log.Printf("Error creating rollback request to %s: %v", urlA, err)
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
 			return
 		}
@@ -268,14 +271,17 @@ func postDeleteUser(c *gin.Context) {
 
 		rollbackResp, err := client.Do(rollbackReq)
 		if err != nil {
-			log.Printf("Error making rollback request to %s: %v", rollbackURL, err)
+			log.Printf("Error making rollback request to %s: %v", urlA, err)
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
 			return
 		}
 		defer rollbackResp.Body.Close()
 
+		respBody, err := io.ReadAll(rollbackResp.Body)
+		print("Response: " + string(respBody))
+
 		if rollbackResp.StatusCode != http.StatusOK {
-			log.Printf("Failed to %s on %s, status code: %d", "/rollback_erase_user", rollbackURL, rollbackResp.StatusCode)
+			log.Printf("Failed to %s on %s, status code: %d", "/rollback_erase_user", urlA, rollbackResp.StatusCode)
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to rollback request"})
 			return
 		}

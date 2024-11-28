@@ -343,7 +343,7 @@ def commit_erase_user():
         
         connection.commit()
         close_db_connection(connection=connection, cursor=cursor)
-        return jsonify({"Response": "Data erased successfully"}), 200
+        return jsonify({"Response": "Data erased successfully", "backups": backups}), 200
     except Exception as e:
         connection.rollback()
         close_db_connection(connection=connection, cursor=cursor)
