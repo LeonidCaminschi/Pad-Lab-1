@@ -1,5 +1,5 @@
 services:
-  db1:
+  db1-1:
     image: mysql:5.7
     restart: always
     environment:
@@ -14,6 +14,38 @@ services:
     volumes:
       - DB-A:/var/lib/mysql
     hostname: db1
+
+  db1-2:
+    image: mysql:5.7
+    restart: always
+    environment:
+      MYSQL_USER: 'user'
+      MYSQL_PASSWORD: 'password'
+      MYSQL_ROOT_PASSWORD: ''
+      MYSQL_ALLOW_EMPTY_PASSWORD: 'yes'
+    ports:
+      - '3309:3306'
+    expose:
+      - '3306'
+    volumes:
+      - DB-A-1:/var/lib/mysql
+    hostname: db1
+
+  db1-3:
+      image: mysql:5.7
+      restart: always
+      environment:
+        MYSQL_USER: 'user'
+        MYSQL_PASSWORD: 'password'
+        MYSQL_ROOT_PASSWORD: ''
+        MYSQL_ALLOW_EMPTY_PASSWORD: 'yes'
+      ports:
+        - '3310:3306'
+      expose:
+        - '3306'
+      volumes:
+        - DB-A-2:/var/lib/mysql
+      hostname: db1
 
   db2:
     image: mysql:5.7
@@ -67,7 +99,9 @@ services:
       - REDIS_HOST=redis
       - REDIS_PORT=6379
     depends_on:
-      - db1
+      - db1-1
+      - db1-2
+      - db1-3
     deploy:
       replicas: 2
     ports:
@@ -91,6 +125,16 @@ services:
       replicas: 2
     ports:
       - '5000'
+
+  database-replication:
+    build: ./DatabaseReplication
+    restart: always
+    depends_on:
+      - db1-1
+      - db1-2
+      - db1-3
+    ports:
+      - '5555:5000'
 
   gateway:
     build: ./Gateway
@@ -135,5 +179,7 @@ services:
 
 volumes:
   DB-A:
+  DB-A-1:
+  DB-A-2:
   DB-B:
   redis-data:

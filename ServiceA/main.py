@@ -16,7 +16,7 @@ metrics = PrometheusMetrics(app)
 db_config = {
     'user': 'root',
     'password': '',
-    'host': 'db1',
+    'host': 'db1-1',
     'database': 'ServiceA',
     'port': 3306
 }
