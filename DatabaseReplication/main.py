@@ -96,12 +96,14 @@ def post_insert():
 
                 master_cursor.execute("SHOW TABLES")
                 tables = master_cursor.fetchall()
+
+                for (table,) in tables:
+                    recovered_cursor.execute(f"DELETE FROM {table}")
+                
                 for (table,) in reversed(tables):
                     master_cursor.execute(f"SELECT * FROM {table}")
                     rows = master_cursor.fetchall()
                     columns = [desc[0] for desc in master_cursor.description]
-
-                    recovered_cursor.execute(f"DELETE FROM {table}")
 
                     for row in rows:
                         placeholders = ', '.join(['%s'] * len(row))
@@ -136,7 +138,7 @@ def post_insert():
     except mysql.connector.Error as e:
         return jsonify({"error": str(e)}), 500
     
-    return jsonify({"Response": "Succesful insertion in available databases " + str(inaccessible_databases) + " " + str(err)}), 200
+    return jsonify({"Response": "Succesful insertion in available databases " + str(inaccessible_databases) + " " + str(err) + " " + str(current_master)}), 200
 
 @app.route('/select', methods=['GET'])
 def get_select():
