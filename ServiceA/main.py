@@ -12,26 +12,6 @@ from prometheus_flask_exporter import PrometheusMetrics
 app = Flask(__name__)
 metrics = PrometheusMetrics(app)
 
-# MySQL configuration
-db_config = {
-    'user': 'root',
-    'password': '',
-    'host': 'db1-1',
-    'database': 'ServiceA',
-    'port': 3306
-}
-
-backups = {}
-
-# Establish MySQL connection
-def get_db_connection():
-    connection = mysql.connector.connect(**db_config)
-    return connection
-
-def close_db_connection(cursor, connection):
-    cursor.close()
-    connection.close()
-
 # Endpoints
 def is_valid_username_password(username, password):
     return re.match("^[a-zA-Z0-9]+$", username) and re.match("^[a-zA-Z0-9]+$", password)
@@ -71,17 +51,20 @@ def register():
     if not is_valid_username_password(username, password):
         return jsonify({"Response": "Invalid character-use \".|/ please use only alphanumerical values"}), 401
 
-    connection = get_db_connection()
-    cursor = connection.cursor()
-    cursor.execute("SELECT * FROM users WHERE username = %s", (username,))
-    if cursor.fetchone():
-        close_db_connection(connection=connection, cursor=cursor)
+    db_query = {
+        "query": "SELECT * FROM users WHERE username = '" + str(username) + "'"
+    }
+    response = requests.get('http://pad-lab-1-database-replication-1:5000/select', json=db_query)
+    if len(response.json().get("Response")[0]) > 0:
         return jsonify({"Response": "username already exists"}), 401
     
-    cursor.execute("INSERT INTO users (username, password) VALUES (%s, %s)", (username, password))
-    connection.commit()
-    close_db_connection(connection=connection, cursor=cursor)
-    
+    db_query = {
+        "query": "INSERT INTO users (username, password) VALUES ('" + str(username) + "', '" + str(password) + "')"
+    }
+    response = requests.post('http://pad-lab-1-database-replication-1:5000/modify-query', json=db_query)
+    if response.status_code != 200:
+        return jsonify({"Response": "Failed to insert user"}), 500
+
     return jsonify({"Response": "Account created"}), 200
 
 @app.route('/login', methods=['POST'])
@@ -96,23 +79,34 @@ def login():
     if not is_valid_username_password(username, password):
         return jsonify({"Response": "Invalid character-use \".|/ please use only alphanumerical values"}), 401
     
-    connection = get_db_connection()
-    cursor = connection.cursor()
-    cursor.execute("SELECT * FROM users WHERE username = %s AND password = %s", (username, password))
-    user = cursor.fetchone()
+    db_query = {
+        "query": "SELECT * FROM users WHERE username = '" + str(username) + "' AND password = '" + str(password) + "'"
+    }
+    response = requests.get('http://pad-lab-1-database-replication-1:5000/select', json=db_query)
+    user = response.json().get("Response")[0]
     
     if user:
         token = secrets.token_hex(8)
-        cursor.execute("SELECT * FROM tokens WHERE username = %s", (username,))
-        if cursor.fetchone():
-            cursor.execute("UPDATE tokens SET token = %s WHERE username = %s", (token, username))
+        db_query = {
+            "query": "SELECT * FROM tokens WHERE username = '" + str(username) + "'"
+        }
+        response = requests.get('http://pad-lab-1-database-replication-1:5000/select', json=db_query)
+        if response.json().get("Response"):
+            db_query = {
+            "query": "UPDATE tokens SET token = '" + str(token) + "' WHERE username = '" + str(username) + "'"
+            }
+            response = requests.post('http://pad-lab-1-database-replication-1:5000/modify-query', json=db_query)
         else:
-            cursor.execute("INSERT INTO tokens (username, token) VALUES (%s, %s)", (username, token))
-        connection.commit()
-        close_db_connection(connection=connection, cursor=cursor)
-        return jsonify({"Response": "Loged in succesful", "token": token}), 200
+            db_query = {
+            "query": "INSERT INTO tokens (username, token) VALUES ('" + str(username) + "', '" + str(token) + "')"
+            }
+            response = requests.post('http://pad-lab-1-database-replication-1:5000/modify-query', json=db_query)
+        
+        if response.status_code == 200:
+            return jsonify({"Response": "Logged in successfully", "token": token}), 200
+        else:
+            return jsonify({"Response": "Failed to update/insert token"}), 500
     else:
-        close_db_connection(connection=connection, cursor=cursor)
         return jsonify({"Response": "Invalid username/password please try again"}), 401
 
 @app.route('/registercard', methods=['POST'])
@@ -129,24 +123,31 @@ def registercard():
     if not re.match("^[0-9]+$", card_info) or not re.match("^[0-9]+$", cvv) or len(card_info) != 16 or len(cvv) != 3:
         return jsonify({"Response": "Invalid card information"}), 401
     
-    # if the card info and cvv are valid inser them into the billing table
-    connection = get_db_connection()
-    cursor = connection.cursor()
-    cursor.execute("SELECT username FROM tokens WHERE token = %s", (token,))
-    user = cursor.fetchone()
+    # if the card info and cvv are valid insert them into the billing table
+    db_query = {
+        "query": "SELECT username FROM tokens WHERE token = '" + str(token) + "'"
+    }
+    response = requests.get('http://pad-lab-1-database-replication-1:5000/select', json=db_query)
+    user = response.json().get("Response")[0]
     if not user:
-        close_db_connection(connection=connection, cursor=cursor)
         return jsonify({"Response": "Invalid token"}), 401
     else:
-        cursor.execute("SELECT * FROM billing WHERE card_info = %s OR username = %s", (card_info, user[0]))
-        if cursor.fetchone():
-            close_db_connection(connection=connection, cursor=cursor)
+        db_query = {
+            "query": "SELECT * FROM billing WHERE card_info = '" + str(card_info) + "' OR username = '" + str(user[0]) + "'"
+        }
+        print(db_query)
+        response = requests.get('http://pad-lab-1-database-replication-1:5000/select', json=db_query)
+        if response.json().get("Response"):
             return jsonify({"Response": "User already has a card binded"}), 401
         
-        cursor.execute("INSERT INTO billing (username, card_info, cvv, money) VALUES (%s, %s, %s, %s)", (user[0], card_info, cvv, money))
-        connection.commit()
-        close_db_connection(connection=connection, cursor=cursor)
-        return jsonify({"Response": "Card registered succesfuly"}), 200
+        db_query = {
+            "query": "INSERT INTO billing (username, card_info, cvv, money) VALUES ('" + str(user) + "', '" + str(card_info) + "', '" + str(cvv) + "', " + money + ")"
+        }
+        response = requests.post('http://pad-lab-1-database-replication-1:5000/modify-query', json=db_query)
+        if response.status_code == 200:
+            return jsonify({"Response": "Card registered successfully"}), 200
+        else:
+            return jsonify({"Response": "Failed to register card"}), 500
 
 @app.route('/subscribe', methods=['POST'])
 def subscribe():

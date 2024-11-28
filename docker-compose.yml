@@ -135,6 +135,7 @@ services:
       - db1-3
     ports:
       - '5555:5000'
+    hostname: database-replication
 
   gateway:
     build: ./Gateway
