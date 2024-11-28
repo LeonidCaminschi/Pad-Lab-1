@@ -2,6 +2,7 @@ from flask import Flask, jsonify, request
 import mysql.connector
 import threading
 import time
+import random
 
 app = Flask(__name__)
 
@@ -68,7 +69,7 @@ def change_master():
             return True
     return False
 
-@app.route('/insert', methods=['POST'])
+@app.route('/modify-query', methods=['POST'])
 def post_insert():
     global current_master
     global inaccessible_databases
@@ -115,7 +116,7 @@ def post_insert():
                 master_connection.close()
                 recovered_cursor.close()
                 recovered_connection.close()
-                
+
                 err = (f"Database {db['host']} is back online, data synchronized, and added to the list.")
             except mysql.connector.Error as e:
                 err = (f"Error synchronizing database {db['host']}: {str(e)}")
@@ -136,6 +137,29 @@ def post_insert():
         return jsonify({"error": str(e)}), 500
     
     return jsonify({"Response": "Succesful insertion in available databases " + str(inaccessible_databases) + " " + str(err)}), 200
+
+@app.route('/select', methods=['GET'])
+def get_select():
+    data = request.json
+    query = data.get('query')
+    results = []
+
+    available_databases = [db for db in databases if check_database_status(db)]
+    if not available_databases:
+        return jsonify({"error": "No accessible databases available"}), 500
+
+    db = random.choice(available_databases)
+    try:
+        connection = mysql.connector.connect(**db)
+        cursor = connection.cursor()
+        cursor.execute(query)
+        results.append(cursor.fetchall())
+        cursor.close()
+        connection.close()
+    except mysql.connector.Error as e:
+        return jsonify({"error": str(e)}), 500
+
+    return jsonify({"Response": results}), 200
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000)
