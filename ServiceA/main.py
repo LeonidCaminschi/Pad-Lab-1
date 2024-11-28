@@ -12,6 +12,8 @@ from prometheus_flask_exporter import PrometheusMetrics
 app = Flask(__name__)
 metrics = PrometheusMetrics(app)
 
+backups = {}
+
 # Endpoints
 def is_valid_username_password(username, password):
     return re.match("^[a-zA-Z0-9]+$", username) and re.match("^[a-zA-Z0-9]+$", password)
@@ -90,16 +92,19 @@ def login():
         db_query = {
             "query": "SELECT * FROM tokens WHERE username = '" + str(username) + "'"
         }
+        print(db_query, flush=True)
         response = requests.get('http://pad-lab-1-database-replication-1:5000/select', json=db_query)
-        if response.json().get("Response"):
+        if len(response.json().get("Response")[0]) > 0:
             db_query = {
             "query": "UPDATE tokens SET token = '" + str(token) + "' WHERE username = '" + str(username) + "'"
             }
+            print(db_query, flush=True)
             response = requests.post('http://pad-lab-1-database-replication-1:5000/modify-query', json=db_query)
         else:
             db_query = {
             "query": "INSERT INTO tokens (username, token) VALUES ('" + str(username) + "', '" + str(token) + "')"
             }
+            print(db_query, flush=True)
             response = requests.post('http://pad-lab-1-database-replication-1:5000/modify-query', json=db_query)
         
         if response.status_code == 200:
@@ -133,16 +138,18 @@ def registercard():
         return jsonify({"Response": "Invalid token"}), 401
     else:
         db_query = {
-            "query": "SELECT * FROM billing WHERE card_info = '" + str(card_info) + "' OR username = '" + str(user[0]) + "'"
+            "query": "SELECT * FROM billing WHERE card_info = '" + str(card_info) + "' OR username = '" + str(user[0][0]) + "'"
         }
-        print(db_query)
+        print(db_query, flush=True)
         response = requests.get('http://pad-lab-1-database-replication-1:5000/select', json=db_query)
-        if response.json().get("Response"):
+        print(response.json().get("Response")[0], flush=True)
+        if len(response.json().get("Response")[0]) > 0:
             return jsonify({"Response": "User already has a card binded"}), 401
         
         db_query = {
-            "query": "INSERT INTO billing (username, card_info, cvv, money) VALUES ('" + str(user) + "', '" + str(card_info) + "', '" + str(cvv) + "', " + money + ")"
+            "query": "INSERT INTO billing (username, card_info, cvv, money) VALUES ('" + str(user[0][0]) + "', '" + str(card_info) + "', '" + str(cvv) + "', " + str(money) + ")"
         }
+        print(db_query, flush=True)
         response = requests.post('http://pad-lab-1-database-replication-1:5000/modify-query', json=db_query)
         if response.status_code == 200:
             return jsonify({"Response": "Card registered successfully"}), 200
@@ -155,44 +162,59 @@ def subscribe():
     token = data.get('user')
     owner = data.get('owner')
     
-    connection = get_db_connection()
-    cursor = connection.cursor()
-    cursor.execute("SELECT username FROM tokens WHERE token = %s", (token,))
-    user = cursor.fetchone()
+    db_query = {
+        "query": "SELECT username FROM tokens WHERE token = '" + str(token) + "'"
+    }
+    print(db_query, flush=True)
+    response = requests.get('http://pad-lab-1-database-replication-1:5000/select', json=db_query)
+    user = response.json().get("Response")[0]
     if not user:
-        close_db_connection(connection=connection, cursor=cursor)
         return jsonify({"Response": "Invalid token"}), 401
     
-    cursor.execute("SELECT * FROM billing WHERE username = %s", (user[0],))
-    card = cursor.fetchone()
+    db_query = {
+        "query": "SELECT * FROM billing WHERE username = '" + str(user[0][0]) + "'"
+    }
+    print(db_query, flush=True)
+    response = requests.get('http://pad-lab-1-database-replication-1:5000/select', json=db_query)
+    card = response.json().get("Response")[0]
     if not card:
-        close_db_connection(connection=connection, cursor=cursor)
-        return jsonify({"Response": "Invalid card coujld not be found for the current user"}), 401
+        return jsonify({"Response": "Invalid card could not be found for the current user"}), 401
 
-    cursor.execute("SELECT * FROM subscription WHERE sender = %s AND owner = %s", (user[0], owner))
-    subscription = cursor.fetchall()
+    db_query = {
+        "query": "SELECT * FROM subscription WHERE sender = '" + str(user[0][0]) + "' AND owner = '" + str(owner) + "'"
+    }
+    print(db_query, flush=True)
+    response = requests.get('http://pad-lab-1-database-replication-1:5000/select', json=db_query)
+    subscription = response.json().get("Response")[0]
     if subscription:
-        close_db_connection(connection=connection, cursor=cursor)
         return jsonify({"Response": "User already subscribed to this user"}), 401
 
-    if card[4] < 5:
-        close_db_connection(connection=connection, cursor=cursor)
+    if int(card[0][3]) < 5:
         return jsonify({"Response": "Insufficient funds"}), 401
     
-    cursor.execute("UPDATE billing SET money = money - 5 WHERE username = %s", (user[0],))
-    cursor.execute("UPDATE billing SET money = money + 5 WHERE username = %s", (owner,))
+    db_query = {
+        "query": "UPDATE billing SET money = money - 5 WHERE username = '" + str(user[0][0]) + "'"
+    }
+    print(db_query, flush=True)
+    response = requests.post('http://pad-lab-1-database-replication-1:5000/modify-query', json=db_query)
+    if response.status_code != 200:
+        return jsonify({"Response": "Transaction Error reverting"}), 400
 
-    cursor.execute("INSERT INTO subscription (sender, owner) VALUES (%s, %s)", (user[0], owner))
+    db_query = {
+        "query": "UPDATE billing SET money = money + 5 WHERE username = '" + str(owner) + "'"
+    }
+    print(db_query, flush=True)
+    response = requests.post('http://pad-lab-1-database-replication-1:5000/modify-query', json=db_query)
+    if response.status_code != 200:
+        return jsonify({"Response": "Transaction Error reverting"}), 400
 
-    try:
-        connection.commit()
-        subscription_successful = True
-    except Exception as e:
-        connection.rollback()
-        subscription_successful = False
-
-    if subscription_successful:
-        return jsonify({"Response": "Succesful subscription"}), 200
+    db_query = {
+        "query": "INSERT INTO subscription (sender, owner) VALUES ('" + str(user[0][0]) + "', '" + str(owner) + "')"
+    }
+    print(db_query, flush=True)
+    response = requests.post('http://pad-lab-1-database-replication-1:5000/modify-query', json=db_query)
+    if response.status_code == 200:
+        return jsonify({"Response": "Successful subscription"}), 200
     else:
         return jsonify({"Response": "Transaction Error reverting"}), 400
 
@@ -202,79 +224,92 @@ def cancel_subscription():
     token = data.get('user')
     owner = data.get('owner')
     
-    connection = get_db_connection()
-    cursor = connection.cursor()
-    
-    cursor.execute("SELECT username FROM tokens WHERE token = %s", (token,))
-    user = cursor.fetchone()
+    db_query = {
+        "query": "SELECT username FROM tokens WHERE token = '" + str(token) + "'"
+    }
+    print(db_query, flush=True)
+    response = requests.get('http://pad-lab-1-database-replication-1:5000/select', json=db_query)
+    user = response.json().get("Response")[0]
     if not user:
-        close_db_connection(connection=connection, cursor=cursor)
         return jsonify({"Response": "Invalid token"}), 401
     
-    cursor.execute("SELECT * FROM subscription WHERE sender = %s AND owner = %s", (user[0], owner))
-    subscription = cursor.fetchall()
+    db_query = {
+        "query": "SELECT * FROM subscription WHERE sender = '" + str(user[0][0]) + "' AND owner = '" + str(owner) + "'"
+    }
+    print(db_query, flush=True)
+    response = requests.get('http://pad-lab-1-database-replication-1:5000/select', json=db_query)
+    subscription = response.json().get("Response")[0]
     if not subscription:
-        close_db_connection(connection=connection, cursor=cursor)
         return jsonify({"Response": "Invalid subscription"}), 401
     
-    cursor.execute("DELETE FROM subscription WHERE sender = %s AND owner = %s", (user[0], owner))
+    db_query = {
+        "query": "DELETE FROM subscription WHERE sender = '" + str(user[0][0]) + "' AND owner = '" + str(owner) + "'"
+    }
+    print(db_query, flush=True)
+    response = requests.post('http://pad-lab-1-database-replication-1:5000/modify-query', json=db_query)
+    if response.status_code != 200:
+        return jsonify({"Response": "Failed to cancel subscription"}), 500
 
-    cursor.execute("UPDATE billing SET money = money + 5 WHERE username = %s", (user[0],))
-    cursor.execute("UPDATE billing SET money = money - 5 WHERE username = %s", (owner,))
+    db_query = {
+        "query": "UPDATE billing SET money = money + 5 WHERE username = '" + str(user[0][0]) + "'"
+    }
+    print(db_query, flush=True)
+    response = requests.post('http://pad-lab-1-database-replication-1:5000/modify-query', json=db_query)
+    if response.status_code != 200:
+        return jsonify({"Response": "Failed to update sender's balance"}), 500
 
-    try:
-        connection.commit()
-        cancellation_successful = True
-    except Exception as e:
-        connection.rollback()
-        cancellation_successful = False
+    db_query = {
+        "query": "UPDATE billing SET money = money - 5 WHERE username = '" + str(owner) + "'"
+    }
+    print(db_query, flush=True)
+    response = requests.post('http://pad-lab-1-database-replication-1:5000/modify-query', json=db_query)
+    if response.status_code != 200:
+        return jsonify({"Response": "Failed to update owner's balance"}), 500
 
-    if cancellation_successful:
-        return jsonify({"Response": "Succesful subscription canceled"}), 200
-    else:
-        return jsonify({"Response": "Invalid user information"}), 400
+    return jsonify({"Response": "Successful subscription canceled"}), 200
 
 @app.route('/validate-user/<token>', methods=['GET'])
 def validate_user(token):
-    connection = get_db_connection()
-    cursor = connection.cursor()
-    cursor.execute("SELECT username FROM tokens WHERE token = %s", (token,))
-    user = cursor.fetchone()
+    db_query = {
+        "query": "SELECT username FROM tokens WHERE token = '" + str(token) + "'"
+    }
+    response = requests.get('http://pad-lab-1-database-replication-1:5000/select', json=db_query)
+    user = response.json().get("Response")[0]
     if not user:
-        close_db_connection(connection=connection, cursor=cursor)
         return jsonify({"Response": "Invalid token"}), 401
     
-    close_db_connection(connection=connection, cursor=cursor)
-    return jsonify({"Response": "User succesfuly validated", "username":user[0]}), 200
+    return jsonify({"Response": "User successfully validated", "username": user[0][0]}), 200
 
 @app.route('/validate-subscription/<token>/<owner>', methods=['GET'])
 def validate_subscription(token, owner):
-    connection = get_db_connection()
-    cursor = connection.cursor()
-    cursor.execute("SELECT username FROM tokens WHERE token = %s", (token,))
-    user = cursor.fetchone()
+    db_query = {
+        "query": "SELECT username FROM tokens WHERE token = '" + str(token) + "'"
+    }
+    response = requests.get('http://pad-lab-1-database-replication-1:5000/select', json=db_query)
+    user = response.json().get("Response")[0]
     if not user:
-        close_db_connection(connection=connection, cursor=cursor)
         return jsonify({"Response": "Invalid token"}), 401
     
-    cursor.execute("SELECT * FROM subscription WHERE sender = %s AND owner = %s", (user[0], owner))
-    subscription = cursor.fetchall()
+    db_query = {
+        "query": "SELECT * FROM subscription WHERE sender = '" + str(user[0][0]) + "' AND owner = '" + str(owner) + "'"
+    }
+    response = requests.get('http://pad-lab-1-database-replication-1:5000/select', json=db_query)
+    subscription = response.json().get("Response")[0]
     if not subscription:
-        close_db_connection(connection=connection, cursor=cursor)
         return jsonify({"Response": "User is not subscribed to this user"}), 401
     
-    close_db_connection(connection=connection, cursor=cursor)
     return jsonify({"Response": "User is subscribed to this user"}), 200
 
 @app.route('/status', methods=['GET'])
 def status():
     try:
-        connection = get_db_connection()
-        close_db_connection(connection=connection, cursor=connection.cursor())
+        response = requests.get('http://pad-lab-1-database-replication-1:5000/status')
+        if response.status_code != 200:
+            return jsonify({"Response": "Service A is down", "Error": response.json()}), 500
     except Exception as e:
         return jsonify({"Response": "Service A is down", "Error": str(e)}), 500
     
-    return jsonify({"Response": "Service A is up and running", "Host": socket.gethostname() }), 200
+    return jsonify({"Response": "Service A is up and running", "Host": socket.gethostname()}), 200
 
 def register_service():
     service_info = {
@@ -313,42 +348,61 @@ def commit_erase_user():
     if not username:
         return jsonify({"Response": "Username cannot be empty"}), 400
     
-    connection = get_db_connection()
-    cursor = connection.cursor()
+    db_query = {
+        "query": "SELECT * FROM tokens WHERE username = '" + str(username) + "'"
+    }
+    response = requests.get('http://pad-lab-1-database-replication-1:5000/select', json=db_query)
+    tokens_backup = response.json().get("Response")[0]
     
-    try:
-        cursor.execute("SELECT * FROM tokens WHERE username = %s", (username,))
-        tokens_backup = cursor.fetchall()
-        
-        cursor.execute("SELECT * FROM billing WHERE username = %s", (username,))
-        billing_backup = cursor.fetchall()
-        
-        cursor.execute("SELECT * FROM subscription WHERE sender = %s OR owner = %s", (username, username))
-        subscription_backup = cursor.fetchall()
-        
-        cursor.execute("SELECT * FROM users WHERE username = %s", (username,))
-        users_backup = cursor.fetchall()
-        
-        backups[username] = {
-            "tokens": tokens_backup,
-            "billing": billing_backup,
-            "subscription": subscription_backup,
-            "users": users_backup
-        }
-        
-        # Delete user data from all tables
-        cursor.execute("DELETE FROM tokens WHERE username = %s", (username,))
-        cursor.execute("DELETE FROM billing WHERE username = %s", (username,))
-        cursor.execute("DELETE FROM subscription WHERE sender = %s OR owner = %s", (username, username))
-        cursor.execute("DELETE FROM users WHERE username = %s", (username,))
-        
-        connection.commit()
-        close_db_connection(connection=connection, cursor=cursor)
+    db_query = {
+        "query": "SELECT * FROM billing WHERE username = '" + str(username) + "'"
+    }
+    response = requests.get('http://pad-lab-1-database-replication-1:5000/select', json=db_query)
+    billing_backup = response.json().get("Response")[0]
+    
+    db_query = {
+        "query": "SELECT * FROM subscription WHERE sender = '" + str(username) + "' OR owner = '" + str(username) + "'"
+    }
+    response = requests.get('http://pad-lab-1-database-replication-1:5000/select', json=db_query)
+    subscription_backup = response.json().get("Response")[0]
+    
+    db_query = {
+        "query": "SELECT * FROM users WHERE username = '" + str(username) + "'"
+    }
+    response = requests.get('http://pad-lab-1-database-replication-1:5000/select', json=db_query)
+    users_backup = response.json().get("Response")[0]
+    
+    backups[username] = {
+        "tokens": tokens_backup,
+        "billing": billing_backup,
+        "subscription": subscription_backup,
+        "users": users_backup
+    }
+    
+    db_query = {
+        "query": "DELETE FROM tokens WHERE username = '" + str(username) + "'"
+    }
+    response = requests.post('http://pad-lab-1-database-replication-1:5000/modify-query', json=db_query)
+    
+    db_query = {
+        "query": "DELETE FROM billing WHERE username = '" + str(username) + "'"
+    }
+    response = requests.post('http://pad-lab-1-database-replication-1:5000/modify-query', json=db_query)
+    
+    db_query = {
+        "query": "DELETE FROM subscription WHERE sender = '" + str(username) + "' OR owner = '" + str(username) + "'"
+    }
+    response = requests.post('http://pad-lab-1-database-replication-1:5000/modify-query', json=db_query)
+    
+    db_query = {
+        "query": "DELETE FROM users WHERE username = '" + str(username) + "'"
+    }
+    response = requests.post('http://pad-lab-1-database-replication-1:5000/modify-query', json=db_query)
+    
+    if response.status_code == 200:
         return jsonify({"Response": "Data erased successfully", "backups": backups}), 200
-    except Exception as e:
-        connection.rollback()
-        close_db_connection(connection=connection, cursor=cursor)
-        return jsonify({"Response": "Failed to erase data", "Error": str(e)}), 500
+    else:
+        return jsonify({"Response": "Failed to erase data"}), 500
 
 @app.route('/rollback_erase_user', methods=['POST'])
 def rollback_erase_user():
@@ -362,29 +416,43 @@ def rollback_erase_user():
     if username not in backups:
         return jsonify({"Response": f"No backup found for the given username: {username}, {backups}"}), 400
     
-    connection = get_db_connection()
-    cursor = connection.cursor()
+    db_query = {
+        "query": "INSERT INTO tokens (username, token) VALUES " + ", ".join(
+            [f"('{token[0]}', '{token[1]}')" for token in backups[username]["tokens"]]
+        )
+    }
+    response = requests.post('http://pad-lab-1-database-replication-1:5000/modify-query', json=db_query)
+    if response.status_code != 200:
+        return jsonify({"Response": "Failed to restore tokens"}), 500
 
-    try:
-        for token in backups[username]["tokens"]:
-            cursor.execute("INSERT INTO tokens VALUES (%s, %s, %s)", token)
-        
-        for billing in backups[username]["billing"]:
-            cursor.execute("INSERT INTO billing VALUES (%s, %s, %s, %s)", billing)
-        
-        for subscription in backups[username]["subscription"]:
-            cursor.execute("INSERT INTO subscription VALUES (%s, %s, %s)", subscription)
-        
-        for user in backups[username]["users"]:
-            cursor.execute("INSERT INTO users VALUES (%s, %s, %s, %s)", user)
-        
-        connection.commit()
-        close_db_connection(connection=connection, cursor=cursor)
-        return jsonify({"Response": "Data restored successfully"}), 200
-    except Exception as e:
-        connection.rollback()
-        close_db_connection(connection=connection, cursor=cursor)
-        return jsonify({"Response": "Failed to restore data", "Error": str(e)}), 500
+    db_query = {
+        "query": "INSERT INTO billing (username, card_info, cvv, money) VALUES " + ", ".join(
+            [f"('{billing[0]}', '{billing[1]}', '{billing[2]}', {billing[3]})" for billing in backups[username]["billing"]]
+        )
+    }
+    response = requests.post('http://pad-lab-1-database-replication-1:5000/modify-query', json=db_query)
+    if response.status_code != 200:
+        return jsonify({"Response": "Failed to restore billing"}), 500
+
+    db_query = {
+        "query": "INSERT INTO subscription (sender, owner) VALUES " + ", ".join(
+            [f"('{subscription[0]}', '{subscription[1]}')" for subscription in backups[username]["subscription"]]
+        )
+    }
+    response = requests.post('http://pad-lab-1-database-replication-1:5000/modify-query', json=db_query)
+    if response.status_code != 200:
+        return jsonify({"Response": "Failed to restore subscription"}), 500
+
+    db_query = {
+        "query": "INSERT INTO users (username, password) VALUES " + ", ".join(
+            [f"('{user[0]}', '{user[1]}')" for user in backups[username]["users"]]
+        )
+    }
+    response = requests.post('http://pad-lab-1-database-replication-1:5000/modify-query', json=db_query)
+    if response.status_code != 200:
+        return jsonify({"Response": "Failed to restore users"}), 500
+
+    return jsonify({"Response": "Data restored successfully"}), 200
 
 if __name__ == '__main__':
     register_service()

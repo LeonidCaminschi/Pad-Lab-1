@@ -163,5 +163,9 @@ def get_select():
 
     return jsonify({"Response": results}), 200
 
+@app.route('/status', methods=['GET'])
+def get_status():
+    return jsonify({"Master": current_master, "Databases": databases, "Inaccessible": inaccessible_databases}), 200
+
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000)
